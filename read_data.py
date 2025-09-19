@@ -28,21 +28,21 @@ def plot_massflows():
 base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
 tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
 
-# assert tdms_path.exists(), f"Not found: {tdms_path}"
+assert tdms_path.exists(), f"Not found: {tdms_path}"
 
-# with TdmsFile.read(tdms_path) as tdms:   # use .open(...) for very large files
-#     grp = tdms['Data']
+with TdmsFile.read(tdms_path) as tdms:   # use .open(...) for very large files
+    grp = tdms['Data']
 
-#     air_volum_flow = grp['Z - Mass flow'][:]
-#     CH4_volum_flow = grp['X - Mass flow'][:]
-#     date_time_raw = grp['Time'][:]
-#     date_time = pd.to_datetime(date_time_raw, format="%Y-%m-%d %H:%M:%S.%f")
+    air_volum_flow = grp['Z - Mass flow'][:]
+    CH4_volum_flow = grp['X - Mass flow'][:]
+    date_time_raw = grp['Time'][:]
+    date_time = pd.to_datetime(date_time_raw, format="%Y-%m-%d %H:%M:%S.%f")
 
-#     flow_df = pd.DataFrame({
-#             'Time' : date_time,
-#             'air mass flow' : air_volum_flow,
-#             'CH4 mass flow' : CH4_volum_flow
-#     })
+    flow_df = pd.DataFrame({
+            'Time' : date_time,
+            'air mass flow' : air_volum_flow,
+            'CH4 mass flow' : CH4_volum_flow
+    })
 
 mat_path = base_path / 'LBO_Sweep_2_8_46_19.mat'
 
