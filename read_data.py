@@ -25,9 +25,17 @@ def plot_massflows():
 
     plt.show()
 
-def plot_pmt():
+def plot_pmt(pmt_signal):
+    # Choose a threshold for "near zero" (1% of max is a decent default)
+    thr = 0
+    # Find first index where we cross from >thr to <=thr
+    cross_idx = np.where((pmt_signal[:-1] > thr) & (pmt_signal[1:] <= thr))[0]
+    i_cross = int(cross_idx[0] + 1) if len(cross_idx) else None
+    print("First near-zero crossing index:", i_cross)
+
     fig, ax = plt.subplots(1, 1, figsize=(11, 4))  # using the subplot API as requested
-    pmt_pressure_df.plot(ax=ax, x='time_fast', y='PMT_OH_1', linewidth=1)
+    pmt_pressure_df.plot(ax=ax, x='time_fast', y='PMT', linewidth=1)
+    ax.axvline(i_cross)
 
     ax.set_title("PMT vs Time")
     ax.set_xlabel("Time")
@@ -68,7 +76,7 @@ start_time_pmt = mat_data['timestamp_fast']
 pmt_pressure_df = pd.DataFrame({
     # 'timestamp_fast': pd.to_datetime(start_time) + pd.to_timedelta(time_fast, unit="s"),
     'time_fast'     : mat_data['time_fast'].ravel(),
-    'PMT_OH_1'      : mat_data['PMT_OH_1'].ravel(),
+    'PMT'      : mat_data['PMT_OH_1'].ravel(),
     'Cam_trig'      : mat_data['Cam_trig'].ravel(),
     'P1'            : mat_data['P1'].ravel(),
     'P2'            : mat_data['P2'].ravel(),
@@ -77,6 +85,5 @@ pmt_pressure_df = pd.DataFrame({
 })
 
 
-print(start_time_pmt)
-plot_pmt()
-plot_massflows()
+plot_pmt(pmt_pressure_df['PMT'])
+# plot_massflows()
