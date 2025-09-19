@@ -25,7 +25,20 @@ def plot_massflows():
 
     plt.show()
 
-base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
+def plot_pmt():
+    fig, ax = plt.subplots(1, 1, figsize=(11, 4))  # using the subplot API as requested
+    pmt_pressure_df.plot(ax=ax, x='time_fast', y='PMT_OH_1', linewidth=1)
+
+    ax.set_title("PMT vs Time")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("PMT")
+    ax.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax.legend()
+    fig.tight_layout()
+
+    plt.show()
+
+base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
 tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
 
 assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -50,15 +63,20 @@ m = sio.loadmat(mat_path, squeeze_me=True, simplify_cells=True)
 mat_data = m['data']            # now a plain dict (SciPy ≥1.7)
 print(list(mat_data.keys()))
 
-df = pd.DataFrame({
-    # 'timestamp_fast': timestamp,
-    #'time_fast'     : np.asarray(getattr(mat_data, 'time_fast'), dtype=float).ravel(),
-    'PMT_OH_1'      : np.asarray(getattr(mat_data, 'PMT_OH_1'), dtype=float).ravel(),
-    'Cam_trig'      : np.asarray(getattr(mat_data, 'Cam_trig'), dtype=float).ravel(),
-    'P1'            : np.asarray(getattr(mat_data, 'P1'), dtype=float).ravel(),
-    'P2'            : np.asarray(getattr(mat_data, 'P2'), dtype=float).ravel(),
-    'P3'            : np.asarray(getattr(mat_data, 'P3'), dtype=float).ravel(),
-    'Pref'          : np.asarray(getattr(mat_data, 'Pref'), dtype=float).ravel(),
-}).sort_values('timestamp_fast').reset_index(drop=True)
+start_time_pmt = mat_data['timestamp_fast'] 
+# time_fast = mat_data['time_fast'].ravel()
+pmt_pressure_df = pd.DataFrame({
+    # 'timestamp_fast': pd.to_datetime(start_time) + pd.to_timedelta(time_fast, unit="s"),
+    'time_fast'     : mat_data['time_fast'].ravel(),
+    'PMT_OH_1'      : mat_data['PMT_OH_1'].ravel(),
+    'Cam_trig'      : mat_data['Cam_trig'].ravel(),
+    'P1'            : mat_data['P1'].ravel(),
+    'P2'            : mat_data['P2'].ravel(),
+    'P3'            : mat_data['P3'].ravel(),
+    'Pref'          : mat_data['Pref'].ravel(),
+})
 
-#Ikke helt sikker, men ser ut som at den tror hver verdi er en float og ikke en array med floats
+
+print(start_time_pmt)
+plot_pmt()
+plot_massflows()
