@@ -15,7 +15,7 @@ def find_channel_names():
 def plot_massflows():
     # ----- plot (single subplot/axes) -----
     fig, ax = plt.subplots(1, 1, figsize=(11, 4))  # using the subplot API as requested
-    flow_df.plot(ax=ax, x="Time", y=["air mass flow", "CH4 mass flow"], linewidth=1)
+    flow_df.plot(ax=ax, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
 
     ax.set_title("Mass Flow vs Time")
     ax.set_xlabel("Time")
@@ -27,20 +27,14 @@ def plot_massflows():
     plt.show()
 
 def plot_pmt(show_plot):
-    # Choose a threshold for "near zero" (1% of max is a decent default)
-    thr = 0
     # Find first index where we cross from >thr to <=thr
-    cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= thr)[0]
+    cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
     i_cross_pmt = int(cross_idx_pmt[0])
     print("First near-zero crossing index:", i_cross_pmt)
 
     nearest_idx_flow = (flow_df['Time'] - pmt_pressure_df['timestamps'][i_cross_pmt]).abs().idxmin()
     cross_flow_time_value = flow_df.loc[nearest_idx_flow, 'Time']
     print("Nearest near-zero crossing index for flow:", nearest_idx_flow, cross_flow_time_value)
-
-    start_idx_flow = ((flow_df['Time'] - pmt_pressure_df['timestamps'][0]).abs().idxmin())
-    start_flow_time_value = flow_df.loc[start_idx_flow, 'Time']
-    print("First index flow:", start_idx_flow, start_flow_time_value)
 
     if show_plot:
 
@@ -53,7 +47,7 @@ def plot_pmt(show_plot):
         ax1.grid(True, which="both", linestyle="--", alpha=0.4)
         ax1.legend()
 
-        flow_df.plot(ax=ax2, x="Time", y=["air mass flow", "CH4 mass flow"], linewidth=1)
+        flow_df.plot(ax=ax2, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
         ax2.axvline(cross_flow_time_value, color='red')
         ax2.set_title("Mass Flow vs Time")
         ax2.set_xlabel("Time")
@@ -65,6 +59,42 @@ def plot_pmt(show_plot):
         ax2.set_xlim(ax1.get_xlim())
         plt.show()
 
+def plot_U_ER():
+    cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
+    i_cross_pmt = int(cross_idx_pmt[0])
+    print("First near-zero crossing index:", i_cross_pmt)
+    
+    nearest_idx_flow = (flow_df['Time'] - pmt_pressure_df['timestamps'][i_cross_pmt]).abs().idxmin()
+    print("Nearest near-zero crossing index for flow:", nearest_idx_flow)
+
+    area_cross_section = 1.51e-4 #m^3
+    pressure = 1e5 #pascal
+    temperature = 273.5 #K
+    R_molar = 8.314 # J/(mol K)
+
+    air_volumflow_blow_off = flow_df['air_volum_flow'][nearest_idx_flow]
+    print(air_volumflow_blow_off)
+    CH4_volumflow_blow_off = flow_df['CH4_volum_flow'][nearest_idx_flow]
+    print(CH4_volumflow_blow_off)
+    total_volumflow_blow_off = air_volumflow_blow_off + CH4_volumflow_blow_off
+    U_blow_off = total_volumflow_blow_off / area_cross_section / 1000 / 60
+
+    air_mole_blow_off = (pressure*air_volumflow_blow_off)/(R_molar*temperature)
+    CH4_mole_blow_off = (pressure*CH4_volumflow_blow_off)/(R_molar*temperature)
+
+    ER_blow_off = (9.5/1) / (air_mole_blow_off/CH4_mole_blow_off)
+
+    fig, ax = plt.subplots(1, 1, figsize=(11, 4))
+    ax.plot([ER_blow_off],[U_blow_off], 'o-' , color = 'red')
+    ax.set_xlabel(r'$\phi$ [-]')
+    ax.set_ylabel('Velocity [m/s]')
+    plt.show()
+
+# Choose a threshold for "near zero" (1% of max is a decent default)
+crossing_threshold = 0
+
+#-------------------------------------------------------------------------------------------
+#load the tdms data
 base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
 tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
 
@@ -82,11 +112,13 @@ with TdmsFile.read(tdms_path) as tdms:   # use .open(...) for very large files
 
     flow_df = pd.DataFrame({
             'Time' : date_time,
-            'air mass flow' : air_volum_flow,
-            'CH4 mass flow' : CH4_volum_flow
+            'air_volum_flow' : air_volum_flow,
+            'CH4_volum_flow' : CH4_volum_flow
     })
 
 
+#-------------------------------------------------------------------------------------------
+#load the mat data
 mat_time_path = base_path / 'LBO_Sweep_2_8_46_19_posix.mat'
 
 m = sio.loadmat(mat_time_path, squeeze_me=True, struct_as_record=False)
@@ -116,6 +148,6 @@ pmt_pressure_df = pd.DataFrame({
     'P3'        : np.asarray(mat_data['P3'], dtype=float).ravel(),
     'Pref'      : np.asarray(mat_data['Pref'], dtype=float).ravel(),
 })
-
-plot_pmt(True)
+#-------------------------------------------------------------------------------------------
+plot_U_ER()
 # plot_massflows()
