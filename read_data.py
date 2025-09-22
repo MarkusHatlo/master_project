@@ -2,8 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.io as sio
-from datetime import datetime, timedelta
+import mat73
 
+from datetime import datetime, timedelta
 from pathlib import Path
 from nptdms import TdmsFile
 
@@ -36,11 +37,17 @@ def plot_pmt(show_plot):
     cross_flow_time_value = flow_df.loc[nearest_idx_flow, 'Time']
     print("Nearest near-zero crossing index for flow:", nearest_idx_flow, cross_flow_time_value)
 
+    # peak_idx_pmt = np.where((pmt_pressure_df['PMT'][:1] - pmt_pressure_df['PMT'][:-10]) > 0.1)[0]
+    # i_peak_pmt = int(peak_idx_pmt[0])
+    # print("First peak index:", i_peak_pmt)
+
+
     if show_plot:
 
         fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
         pmt_pressure_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
         ax1.axvline(pmt_pressure_df['timestamps'][i_cross_pmt], color='red')
+        # ax1.axvline(pmt_pressure_df['timestamps'][i_peak_pmt], color='red')
         ax1.set_title("PMT vs Time")
         ax1.set_xlabel("Time")
         ax1.set_ylabel("PMT")
@@ -66,6 +73,8 @@ def plot_U_ER():
     
     nearest_idx_flow = (flow_df['Time'] - pmt_pressure_df['timestamps'][i_cross_pmt]).abs().idxmin()
     print("Nearest near-zero crossing index for flow:", nearest_idx_flow)
+
+    # peak_idx_flow
 
     area_cross_section = 1.51e-4 #m^3
     pressure = 1e5 #pascal
@@ -95,7 +104,8 @@ crossing_threshold = 0
 
 #-------------------------------------------------------------------------------------------
 #load the tdms data
-base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
+base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
+# base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
 tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
 
 assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -149,5 +159,8 @@ pmt_pressure_df = pd.DataFrame({
     'Pref'      : np.asarray(mat_data['Pref'], dtype=float).ravel(),
 })
 #-------------------------------------------------------------------------------------------
+
+
 plot_U_ER()
+# plot_pmt(True)
 # plot_massflows()
