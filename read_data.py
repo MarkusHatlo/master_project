@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.io as sio
-import mat73
+# import mat73
 
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -104,8 +104,8 @@ crossing_threshold = 0
 
 #-------------------------------------------------------------------------------------------
 #load the tdms data
-base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
-# base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
+# base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
+base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm')
 tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
 
 assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -161,6 +161,6 @@ pmt_pressure_df = pd.DataFrame({
 #-------------------------------------------------------------------------------------------
 
 
-plot_U_ER()
-# plot_pmt(True)
+# plot_U_ER()
+plot_pmt(True)
 # plot_massflows()
