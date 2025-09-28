@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -7,8 +9,9 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from nptdms import TdmsFile
+from collections import defaultdict
 
-def iter_data_files(base_path, include_subfolders=False):
+def iter_data_files(base_path: Path, include_subfolders=False):
     """
     Yields every .tdms and .mat file under base_path.
     Set include_subfolders=True to recurse into subfolders.
@@ -57,14 +60,12 @@ def parse_tdms_time_seconds(name: str) -> int | None:
     _, hh, mm, ss = m.groups()
     return _secs_since_midnight(int(hh), int(mm), int(ss))
 
-def pair_mat_tdms(files, *, tolerance_seconds=20, group_by_dir=True):
+def pair_mat_tdms(files: List[Path], *, tolerance_seconds=20, group_by_dir=True):
     """
     Pair .mat with the closest-in-time .tdms, within tolerance.
     If group_by_dir=True, only pair files that share the same parent directory.
     Returns (pairs, unmatched_mats, unmatched_tdms).
     """
-    from collections import defaultdict
-
     # Group files by directory if requested, else put all in one bucket
     buckets = defaultdict(list)
     for p in files:
@@ -124,7 +125,9 @@ def find_channel_names():
         print(g.name, [c.name for c in g.channels()])
 
 def plot_massflows():
-    # ----- plot (single subplot/axes) -----
+    """
+        ----- plot (single subplot/axes) -----    
+    """
     fig, ax = plt.subplots(1, 1, figsize=(11, 4))  # using the subplot API as requested
     flow_df.plot(ax=ax, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
 
@@ -137,7 +140,7 @@ def plot_massflows():
 
     plt.show()
 
-def plot_pmt(show_plot):
+def plot_pmt(show_plot: bool):
     # Find first index where we cross from >thr to <=thr
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
     i_cross_pmt = int(cross_idx_pmt[0])
@@ -151,9 +154,7 @@ def plot_pmt(show_plot):
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
 
-
     if show_plot:
-
         fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
         pmt_pressure_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
         ax1.axvline(pmt_pressure_df['timestamps'][i_cross_pmt], color='red')
@@ -210,7 +211,7 @@ def calculate_U_ER():
     # ax.set_ylabel('Velocity [m/s]')
     # plt.show()
 
-def load_tdms_data(tdms_path):
+def load_tdms_data(tdms_path: Path):
     #load the tdms data
     assert tdms_path.exists(), f"Not found: {tdms_path}"
 
@@ -232,7 +233,7 @@ def load_tdms_data(tdms_path):
 
         return flow_df
 
-def load_mat_data(mat_path):
+def load_mat_data(mat_path: Path):
     #load the mat data
 
     m = sio.loadmat(mat_path, squeeze_me=True, simplify_cells=True)
@@ -257,12 +258,13 @@ def load_mat_data(mat_path):
         'Pref'      : np.asarray(mat_data['Pref'], dtype=float).ravel(),
     })
 
+
     return pmt_pressure_df
 # Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0.1
 
 base_path = Path(r'D:\202508Experiment_data_logging\test_mappe_2')
-files = iter_data_files(base_path, include_subfolders=False)
+files = iter_data_files(base_path)
 
 pairs, um_mats, um_tdms = pair_mat_tdms(
     files,
