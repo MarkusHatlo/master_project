@@ -119,6 +119,18 @@ def pair_mat_tdms(files: List[Path], *, tolerance_seconds=20, group_by_dir=True)
 
     return all_pairs, all_unmatched_mats, all_unmatched_tdms
 
+_LOG_RE = re.compile(r'(?:^|[_\-\s])log\s*([0-9]+)(?=[_\-\s.]|$)', re.IGNORECASE)
+def get_log_no(filename: str) -> int | None:
+    """Extract the log number from a filename (stem or full name)."""
+    m = _LOG_RE.search(filename)
+    return int(m.group(1)) if m else None
+
+# ER like ER1_0,65 → 0.65 (comma decimal)
+_ER_RE = re.compile(r'ER[0-9]+_([0-9],[0-9]+)', re.IGNORECASE)
+def get_er_est(name: str) -> float | None:
+    m = _ER_RE.search(name)
+    return float(m.group(1).replace(',', '.')) if m else None
+
 def find_channel_names():
     print([g.name for g in tdms.groups()])
     for g in tdms.groups():
@@ -263,14 +275,15 @@ def load_mat_data(mat_path: Path):
     return pmt_pressure_df
 
 csv_rows: List[Dict] = []
-def record_pair(file_a: Path, file_b: Path, ER: float, velocity: float):
-    file_a = Path(file_a)
-    file_b = Path(file_b)
+def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float):
+    tdms_stem = file_tdms.stem
     csv_rows.append({
-        "folder": file_a.parent.name,                 # folder name of file A
-        "mat_file": file_a.name,                          # file A name
-        "tdms_file": file_b.name,                   # file B name (the pairing)
-        "pairing": f"{file_a.stem} <> {file_b.stem}", # human-readable pairing label
+        "folder": file_mat.parent.name,                 # folder name of file A
+        "mat_file": file_mat.name,                          # file A name
+        "tdms_file": file_tdms.name,                   # file B name (the pairing)
+        "pairing": f"{file_mat.stem} <> {tdms_stem}", # human-readable pairing label
+        "log": get_log_no(tdms_stem),
+        "er_est": get_er_est(tdms_stem),
         "ER": float(ER),
         "velocity": float(velocity),
     })
@@ -289,11 +302,15 @@ pairs, um_mats, um_tdms = pair_mat_tdms(
 
 for mat, tdms in pairs:
     print("PAIR:", mat.name, "<->", tdms.name)
-    flow_df = load_tdms_data(tdms)
-    pmt_pressure_df = load_mat_data(mat)
-    # plot_pmt(True)
-    ER_pair, U_pair = calculate_U_ER()
-    record_pair(mat, tdms, ER_pair, U_pair)
+    if (n := get_log_no(tdms.stem)) in {1,2,3}:
+        print('Files are LBO')
+        flow_df = load_tdms_data(tdms)
+        pmt_pressure_df = load_mat_data(mat)
+        # plot_pmt(True)
+        ER_pair, U_pair = calculate_U_ER()
+        record_pair(mat, tdms, ER_pair, U_pair)
+    else:
+        print('Log is not 1,2 or 3')
 
     if um_mats:
         print("\nUnmatched MAT:")
@@ -307,7 +324,7 @@ for mat, tdms in pairs:
 # ---- After the loop finishes ----
 script_dir = Path(__file__).resolve().parent
 out_csv = script_dir / "post_process_data.csv"
-csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","ER","velocity"])
+csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","log","er_est","ER","velocity"])
 csv_df.to_csv(out_csv, index=False)
 print(f"Saved {len(csv_df)} rows to {out_csv}")
 
