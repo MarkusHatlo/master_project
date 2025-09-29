@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -197,14 +197,15 @@ def calculate_U_ER():
     CH4_volumflow_blow_off = flow_df['CH4_volum_flow'][nearest_idx_flow]
     print(CH4_volumflow_blow_off)
     total_volumflow_blow_off = air_volumflow_blow_off + CH4_volumflow_blow_off
-    U_blow_off = total_volumflow_blow_off / area_cross_section / 1000 / 60
+    U_blow_off = float(total_volumflow_blow_off / area_cross_section / 1000 / 60)
 
     air_mole_blow_off = (pressure*air_volumflow_blow_off)/(R_molar*temperature)
     CH4_mole_blow_off = (pressure*CH4_volumflow_blow_off)/(R_molar*temperature)
 
-    ER_blow_off = (9.5/1) / (air_mole_blow_off/CH4_mole_blow_off)
+    ER_blow_off = float((9.5/1) / (air_mole_blow_off/CH4_mole_blow_off))
     print(f'ER: {ER_blow_off} U: {U_blow_off}')
 
+    return ER_blow_off, U_blow_off
     # fig, ax = plt.subplots(1, 1, figsize=(11, 4))
     # ax.plot([ER_blow_off],[U_blow_off], 'o-' , color = 'red')
     # ax.set_xlabel(r'$\phi$ [-]')
@@ -260,8 +261,22 @@ def load_mat_data(mat_path: Path):
 
 
     return pmt_pressure_df
+
+csv_rows: List[Dict] = []
+def record_pair(file_a: Path, file_b: Path, ER: float, velocity: float):
+    file_a = Path(file_a)
+    file_b = Path(file_b)
+    csv_rows.append({
+        "folder": file_a.parent.name,                 # folder name of file A
+        "mat_file": file_a.name,                          # file A name
+        "tdms_file": file_b.name,                   # file B name (the pairing)
+        "pairing": f"{file_a.stem} <> {file_b.stem}", # human-readable pairing label
+        "ER": float(ER),
+        "velocity": float(velocity),
+    })
+
 # Choose a threshold for "near zero" (1% of max is a decent default)
-crossing_threshold = 0.1
+crossing_threshold = 0
 
 base_path = Path(r'D:\202508Experiment_data_logging\test_mappe_2')
 files = iter_data_files(base_path)
@@ -276,30 +291,26 @@ for mat, tdms in pairs:
     print("PAIR:", mat.name, "<->", tdms.name)
     flow_df = load_tdms_data(tdms)
     pmt_pressure_df = load_mat_data(mat)
-    plot_pmt(True)
-    calculate_U_ER()
+    # plot_pmt(True)
+    ER_pair, U_pair = calculate_U_ER()
+    record_pair(mat, tdms, ER_pair, U_pair)
 
+    if um_mats:
+        print("\nUnmatched MAT:")
+        for p in um_mats:
+            print("  ", p.name)
+    if um_tdms:
+        print("\nUnmatched TDMS:")
+        for p in um_tdms:
+            print("  ", p.name)
 
+# ---- After the loop finishes ----
+script_dir = Path(__file__).resolve().parent
+out_csv = script_dir / "post_process_data.csv"
+csv_df = pd.DataFrame(csv_rows, columns=["folder","file","paired_with","pairing","ER","velocity"])
+csv_df.to_csv(out_csv, index=False)
+print(f"Saved {len(csv_df)} rows to {out_csv}")
 
-
-if um_mats:
-    print("\nUnmatched MAT:")
-    for p in um_mats:
-        print("  ", p.name)
-if um_tdms:
-    print("\nUnmatched TDMS:")
-    for p in um_tdms:
-        print("  ", p.name)
-
-
-# for path in iter_data_files(base_path, False):
-#     if path.suffix.lower() == ".tdms":
-#         # process_tdms(path)
-#         print("TDMS:", path)
-#         # flow_df = load_tdms_data(path)
-#     elif path.suffix.lower() == ".mat":
-#         print("MAT :", path)
-#         # pmt_pressure_df = load_mat_data(path)
 
 #-------------------------------------------------------------------------------------------
 # base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
