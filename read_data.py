@@ -136,7 +136,7 @@ def find_channel_names():
     for g in tdms.groups():
         print(g.name, [c.name for c in g.channels()])
 
-def plot_massflows():
+def plot_massflows(flow_df: pd.DataFrame):
     """
         ----- plot (single subplot/axes) -----    
     """
@@ -152,7 +152,7 @@ def plot_massflows():
 
     plt.show()
 
-def plot_pmt(show_plot: bool):
+def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: bool):
     # Find first index where we cross from >thr to <=thr
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
     i_cross_pmt = int(cross_idx_pmt[0])
@@ -165,6 +165,44 @@ def plot_pmt(show_plot: bool):
     # peak_idx_pmt = np.where((pmt_pressure_df['PMT'][:1] - pmt_pressure_df['PMT'][:-10]) > 0.1)[0]
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
+
+def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
+    cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
+    i_cross_pmt = int(cross_idx_pmt[0])
+    cross_pmt_time_value = pmt_pressure_df['timestamps'][i_cross_pmt]
+    print("First near-zero crossing index for pmt:", i_cross_pmt)
+
+    nearest_idx_flow = (flow_df['Time'] - cross_pmt_time_value).abs().idxmin()
+    cross_flow_time_value = flow_df.loc[nearest_idx_flow, 'Time']
+    print("Nearest near-zero crossing index for flow:", nearest_idx_flow)
+
+
+    cross_time_diff = abs(cross_flow_time_value - cross_pmt_time_value)
+    print('Blow off time pmt:',cross_pmt_time_value)
+    print('Blow off time flow:',cross_flow_time_value)
+    print('Blow off time difference is:',cross_time_diff)
+
+    # peak_idx_pmt = np.where((pmt_pressure_df['PMT'][:1] - pmt_pressure_df['PMT'][:-10]) > 0.1)[0]
+    # i_peak_pmt = int(peak_idx_pmt[0])
+    # print("First peak index:", i_peak_pmt)
+
+    area_cross_section = 1.51e-4 #m^3
+    pressure = 1e5 #pascal
+    temperature = 273.5 #K
+    R_molar = 8.314 # J/(mol K)
+
+    air_volumflow_blow_off = flow_df['air_volum_flow'][nearest_idx_flow]
+    print(f'Air at blow off{air_volumflow_blow_off}')
+    CH4_volumflow_blow_off = flow_df['CH4_volum_flow'][nearest_idx_flow]
+    print(f'Air at blow off{CH4_volumflow_blow_off}')
+    total_volumflow_blow_off = air_volumflow_blow_off + CH4_volumflow_blow_off
+    U_blow_off = float(total_volumflow_blow_off / area_cross_section / 1000 / 60)
+
+    air_mole_blow_off = (pressure*air_volumflow_blow_off)/(R_molar*temperature)
+    CH4_mole_blow_off = (pressure*CH4_volumflow_blow_off)/(R_molar*temperature)
+
+    ER_blow_off = float((9.5/1) / (air_mole_blow_off/CH4_mole_blow_off))
+    print(f'ER: {ER_blow_off} U: {U_blow_off}')
 
     if show_plot:
         fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
@@ -189,35 +227,7 @@ def plot_pmt(show_plot: bool):
         ax2.set_xlim(ax1.get_xlim())
         plt.show()
 
-def calculate_U_ER():
-    cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
-    i_cross_pmt = int(cross_idx_pmt[0])
-    print("First near-zero crossing index:", i_cross_pmt)
-
-    nearest_idx_flow = (flow_df['Time'] - pmt_pressure_df['timestamps'][i_cross_pmt]).abs().idxmin()
-    print("Nearest near-zero crossing index for flow:", nearest_idx_flow)
-
-    # peak_idx_flow
-
-    area_cross_section = 1.51e-4 #m^3
-    pressure = 1e5 #pascal
-    temperature = 273.5 #K
-    R_molar = 8.314 # J/(mol K)
-
-    air_volumflow_blow_off = flow_df['air_volum_flow'][nearest_idx_flow]
-    print(air_volumflow_blow_off)
-    CH4_volumflow_blow_off = flow_df['CH4_volum_flow'][nearest_idx_flow]
-    print(CH4_volumflow_blow_off)
-    total_volumflow_blow_off = air_volumflow_blow_off + CH4_volumflow_blow_off
-    U_blow_off = float(total_volumflow_blow_off / area_cross_section / 1000 / 60)
-
-    air_mole_blow_off = (pressure*air_volumflow_blow_off)/(R_molar*temperature)
-    CH4_mole_blow_off = (pressure*CH4_volumflow_blow_off)/(R_molar*temperature)
-
-    ER_blow_off = float((9.5/1) / (air_mole_blow_off/CH4_mole_blow_off))
-    print(f'ER: {ER_blow_off} U: {U_blow_off}')
-
-    return ER_blow_off, U_blow_off
+    return ER_blow_off, U_blow_off, cross_time_diff
     # fig, ax = plt.subplots(1, 1, figsize=(11, 4))
     # ax.plot([ER_blow_off],[U_blow_off], 'o-' , color = 'red')
     # ax.set_xlabel(r'$\phi$ [-]')
@@ -236,6 +246,7 @@ def load_tdms_data(tdms_path: Path):
         date_time_raw = grp['Time'][:]
         date_time = pd.to_datetime(date_time_raw,utc=True)  # tz-aware UTC
         date_time = date_time.tz_convert("Europe/Oslo")
+        date_time = date_time - pd.Timedelta(hours=1)
 
 
         flow_df = pd.DataFrame({
@@ -256,7 +267,7 @@ def load_mat_data(mat_path: Path):
     posix = float(mat_data['timestamp_fast_posix'])
     start_time_pmt = datetime(1970,1,1) + timedelta(seconds=posix)
     t_rel = np.asarray(mat_data['time_fast'], dtype=float).ravel()  # seconds
-    timestamps = pd.to_datetime(start_time_pmt, utc=True) + pd.to_timedelta(t_rel, unit='s') - pd.Timedelta(hours=1)
+    timestamps = pd.to_datetime(start_time_pmt, utc=True) + pd.to_timedelta(t_rel, unit='s')# - pd.Timedelta(hours=1)
     timestamps = timestamps.tz_convert("Europe/Oslo")
     timestamps_pmt = timestamps.to_pydatetime()  # ndarray of datetime objects
 
@@ -275,7 +286,7 @@ def load_mat_data(mat_path: Path):
     return pmt_pressure_df
 
 csv_rows: List[Dict] = []
-def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float):
+def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float,time_diff):
     tdms_stem = file_tdms.stem
     csv_rows.append({
         "folder": file_mat.parent.name,                 # folder name of file A
@@ -286,13 +297,14 @@ def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float):
         "er_est": get_er_est(tdms_stem),
         "ER": float(ER),
         "velocity": float(velocity),
+        "time_diff" : time_diff
     })
 
 # Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0
 
-base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm_test_mappe')
-files = iter_data_files(base_path)
+base_path = Path(r'data')
+files = iter_data_files(base_path, True)
 
 pairs, um_mats, um_tdms = pair_mat_tdms(
     files,
@@ -300,31 +312,32 @@ pairs, um_mats, um_tdms = pair_mat_tdms(
     group_by_dir=True
 )
 
-for mat, tdms in pairs:
+total_files = len(pairs)
+for file_idx, (mat, tdms) in enumerate(pairs):
+    print(f'Files processed {file_idx+1}/{total_files}')
     print("PAIR:", mat.name, "<->", tdms.name)
     if (n := get_log_no(tdms.stem)) in {1,2,3}:
         print('Files are LBO')
-        flow_df = load_tdms_data(tdms)
-        pmt_pressure_df = load_mat_data(mat)
-        # plot_pmt(True)
-        ER_pair, U_pair = calculate_U_ER()
-        record_pair(mat, tdms, ER_pair, U_pair)
+        flow_data_df = load_tdms_data(tdms)
+        pmt_pressure_data_df = load_mat_data(mat)
+        ER_pair, U_pair, time_difference = calculate_U_ER(pmt_pressure_data_df,flow_data_df)
+        record_pair(mat, tdms, ER_pair, U_pair, time_difference)
     else:
         print('Log is not 1,2 or 3')
 
-    if um_mats:
-        print("\nUnmatched MAT:")
-        for p in um_mats:
-            print("  ", p.name)
-    if um_tdms:
-        print("\nUnmatched TDMS:")
-        for p in um_tdms:
-            print("  ", p.name)
+if um_mats:
+    print("\nUnmatched MAT:")
+    for p in um_mats:
+        print("  ", p.name)
+if um_tdms:
+    print("\nUnmatched TDMS:")
+    for p in um_tdms:
+        print("  ", p.name)
 
 # ---- After the loop finishes ----
 script_dir = Path(__file__).resolve().parent
 out_csv = script_dir / "post_process_data.csv"
-csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","log","er_est","ER","velocity"])
+csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
 csv_df.to_csv(out_csv, index=False)
 print(f"Saved {len(csv_df)} rows to {out_csv}")
 
