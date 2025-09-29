@@ -291,7 +291,7 @@ def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float):
 # Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0
 
-base_path = Path(r'D:\202508Experiment_data_logging\test_mappe_2')
+base_path = Path(r'D:\202508Experiment_data_logging\03_09_D_88mm_350mm_test_mappe')
 files = iter_data_files(base_path)
 
 pairs, um_mats, um_tdms = pair_mat_tdms(

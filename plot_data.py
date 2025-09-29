@@ -18,11 +18,11 @@ def extract_dims(folder_name: str):
 # --- Load ---
 df = pd.read_csv("post_process_data.csv")
 
-# Keep only Log 1–3 and rows with an estimated ER to group logs together
+# Keep only Log 1-3 and rows with an estimated ER to group logs together
 df = df[df["log"].isin([1, 2, 3])].dropna(subset=["er_est"])
 
 # --- Average within each folder & estimated ER ---
-# We take the MEAN of the *calculated* ER and U across logs 1–3
+# We take the MEAN of the *calculated* ER and U across logs 1-3
 avg = (df.groupby(["folder", "er_est"], as_index=False)
          .agg(ER_mean=("ER", "mean"),
               U_mean=("velocity", "mean")))
@@ -38,22 +38,12 @@ for (folder, D, H), g in avg.groupby(["folder", "D_mm", "H_mm"]):
     g = g.sort_values("ER_mean")
     label = (f"D={D}mm, H={H}mm"
              if pd.notna(D) and pd.notna(H) else folder)
-    plt.plot(g["U_mean"],g["ER_mean"], "o-", label=label)
+    plt.plot(g["ER_mean"],g["U_mean"], "o-", label=label)
 
-plt.xlabel("Calculated ER (mean across Log 1–3) [-]")
-plt.ylabel("U mean [m/s]")
-plt.title("U vs Calculated ER (averaged over Log 1–3), one line per folder")
+plt.xlabel("Equivalence ratio [-]")
+plt.ylabel("Mean velocity [m/s]")
+plt.title("Mean velocity vs Equivalence ratio")
 plt.grid(True, alpha=0.3)
-plt.legend(title="Folder", fontsize=9)
+plt.legend(title="Quartz dimentions", fontsize=9)
 plt.tight_layout()
 plt.show()
-# ER = csv_df['ER']
-# U = csv_df['velocity']
-
-
-# fig, ax = plt.subplots(1,1, figsize=(11,5))
-# ax.plot(ER,U)
-# ax.set_xlabel('Equivalence ratio [-]')
-# ax.set_ylabel('Velocity [m/s]')
-# plt.tight_layout()
-# plt.show()
