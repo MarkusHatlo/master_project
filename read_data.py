@@ -307,7 +307,7 @@ for mat, tdms in pairs:
 # ---- After the loop finishes ----
 script_dir = Path(__file__).resolve().parent
 out_csv = script_dir / "post_process_data.csv"
-csv_df = pd.DataFrame(csv_rows, columns=["folder","file","paired_with","pairing","ER","velocity"])
+csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","ER","velocity"])
 csv_df.to_csv(out_csv, index=False)
 print(f"Saved {len(csv_df)} rows to {out_csv}")
 
