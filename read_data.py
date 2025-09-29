@@ -168,6 +168,14 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
 
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
+
+    if cross_idx_pmt.size == 0:
+        # No crossing found — skip cleanly
+        msg = (f"[WARN] No PMT crossing at threshold {crossing_threshold}. "
+            f"Signal min={np.min(pmt_pressure_df['PMT']):.3g}, max={np.max(pmt_pressure_df['PMT']):.3g}")
+        print(msg)
+        return None, None, None
+
     i_cross_pmt = int(cross_idx_pmt[0])
     cross_pmt_time_value = pmt_pressure_df['timestamps'][i_cross_pmt]
     print("First near-zero crossing index for pmt:", i_cross_pmt)
@@ -320,7 +328,11 @@ for file_idx, (mat, tdms) in enumerate(pairs):
         print('Files are LBO')
         flow_data_df = load_tdms_data(tdms)
         pmt_pressure_data_df = load_mat_data(mat)
-        ER_pair, U_pair, time_difference = calculate_U_ER(pmt_pressure_data_df,flow_data_df)
+        result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
+        if result == (None, None, None):
+            # e.g., continue to next file
+            continue
+        ER_pair, U_pair, time_difference = result
         record_pair(mat, tdms, ER_pair, U_pair, time_difference)
     else:
         print('Log is not 1,2 or 3')
