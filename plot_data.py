@@ -16,7 +16,7 @@ def extract_dims(folder_name: str):
     return None, None
 
 # --- Load ---
-df = pd.read_csv("post_process_data.csv")
+df = pd.read_csv("post_process_data_all.csv")
 
 # Keep only Log 1-3 and rows with an estimated ER to group logs together
 df = df[df["log"].isin([1, 2, 3])].dropna(subset=["er_est"])

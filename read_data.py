@@ -319,7 +319,8 @@ pairs, um_mats, um_tdms = pair_mat_tdms(
     tolerance_seconds=20,   # tweak if needed
     group_by_dir=True
 )
-
+unpaired = 0
+no_zero_cross = 0
 total_files = len(pairs)
 for file_idx, (mat, tdms) in enumerate(pairs):
     print(f'Files processed {file_idx+1}/{total_files}')
@@ -330,6 +331,7 @@ for file_idx, (mat, tdms) in enumerate(pairs):
         pmt_pressure_data_df = load_mat_data(mat)
         result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
         if result == (None, None, None):
+            no_zero_cross += 1
             # e.g., continue to next file
             continue
         ER_pair, U_pair, time_difference = result
@@ -341,10 +343,12 @@ if um_mats:
     print("\nUnmatched MAT:")
     for p in um_mats:
         print("  ", p.name)
+        unpaired += 1
 if um_tdms:
     print("\nUnmatched TDMS:")
     for p in um_tdms:
         print("  ", p.name)
+        unpaired += 1
 
 # ---- After the loop finishes ----
 script_dir = Path(__file__).resolve().parent
@@ -352,7 +356,7 @@ out_csv = script_dir / "post_process_data.csv"
 csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
 csv_df.to_csv(out_csv, index=False)
 print(f"Saved {len(csv_df)} rows to {out_csv}")
-
+print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
 
 #-------------------------------------------------------------------------------------------
 # base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
