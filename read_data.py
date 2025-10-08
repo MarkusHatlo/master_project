@@ -131,7 +131,7 @@ def get_er_est(name: str) -> float | None:
     m = _ER_RE.search(name)
     return float(m.group(1).replace(',', '.')) if m else None
 
-def find_channel_names():
+def find_channel_names(tdms: Path):
     print([g.name for g in tdms.groups()])
     for g in tdms.groups():
         print(g.name, [c.name for c in g.channels()])
@@ -214,6 +214,7 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
 
     if show_plot:
         fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
+        # pmt_pressure_df.plot(ax=ax1, x='timestamps', y=['PMT', 'P1'], linewidth=1)
         pmt_pressure_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
         ax1.axvline(pmt_pressure_df['timestamps'][i_cross_pmt], color='red')
         # ax1.axvline(pmt_pressure_df['timestamps'][i_peak_pmt], color='red')
@@ -307,63 +308,88 @@ def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float,time
         "velocity": float(velocity),
         "time_diff" : time_diff
     })
-
-# Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0
 
-base_path = Path(r'data')
-files = iter_data_files(base_path, True)
+def main():
+    # Choose a threshold for "near zero" (1% of max is a decent default)
 
-pairs, um_mats, um_tdms = pair_mat_tdms(
-    files,
-    tolerance_seconds=20,   # tweak if needed
-    group_by_dir=True
-)
-unpaired = 0
-no_zero_cross = 0
-total_files = len(pairs)
-for file_idx, (mat, tdms) in enumerate(pairs):
-    print(f'Files processed {file_idx+1}/{total_files}')
-    print("PAIR:", mat.name, "<->", tdms.name)
-    if (n := get_log_no(tdms.stem)) in {1,2,3}:
-        print('Files are LBO')
-        flow_data_df = load_tdms_data(tdms)
-        pmt_pressure_data_df = load_mat_data(mat)
-        result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
-        if result == (None, None, None):
-            no_zero_cross += 1
-            # e.g., continue to next file
-            continue
-        ER_pair, U_pair, time_difference = result
-        record_pair(mat, tdms, ER_pair, U_pair, time_difference)
-    else:
-        print('Log is not 1,2 or 3')
+    base_path = Path(r'data')
+    files = iter_data_files(base_path, True)
 
-if um_mats:
-    print("\nUnmatched MAT:")
-    for p in um_mats:
-        print("  ", p.name)
-        unpaired += 1
-if um_tdms:
-    print("\nUnmatched TDMS:")
-    for p in um_tdms:
-        print("  ", p.name)
-        unpaired += 1
+    pairs, um_mats, um_tdms = pair_mat_tdms(
+        files,
+        tolerance_seconds=55,   # tweak if needed
+        group_by_dir=True
+    )
+    unpaired = 0
+    no_zero_cross = 0
+    total_files = len(pairs)
+    for file_idx, (mat, tdms) in enumerate(pairs):
+        print(f'Files processed {file_idx+1}/{total_files}')
+        print("PAIR:", mat.name, "<->", tdms.name)
+        if (n := get_log_no(tdms.stem)) in {1,2,3}:
+            print('Files are LBO')
+            flow_data_df = load_tdms_data(tdms)
+            pmt_pressure_data_df = load_mat_data(mat)
+            result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
+            if result == (None, None, None):
+                no_zero_cross += 1
+                # e.g., continue to next file
+                continue
+            ER_pair, U_pair, time_difference = result
+            record_pair(mat, tdms, ER_pair, U_pair, time_difference)
+        else:
+            print('Log is not 1,2 or 3')
 
-# ---- After the loop finishes ----
-script_dir = Path(__file__).resolve().parent
-out_csv = script_dir / "post_process_data.csv"
-csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
-csv_df.to_csv(out_csv, index=False)
-print(f"Saved {len(csv_df)} rows to {out_csv}")
-print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
+    if um_mats:
+        print("\nUnmatched MAT:")
+        for p in um_mats:
+            print("  ", p.name, p.parent)
+            unpaired += 1
+    if um_tdms:
+        print("\nUnmatched TDMS:")
+        for p in um_tdms:
+            print("  ", p.name, p.parent)
+            unpaired += 1
 
+    # ---- After the loop finishes ----
+    script_dir = Path(__file__).resolve().parent
+    out_csv = script_dir / "post_process_data.csv"
+    csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
+    csv_df.to_csv(out_csv, index=False)
+    print(f"Saved {len(csv_df)} rows to {out_csv}")
+    print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
+
+main()
 #-------------------------------------------------------------------------------------------
-# base_path = Path(r'G:\202508Experiment_data_logging\03_09_D_88mm_350mm')
-# tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
-# mat_time_path = base_path / 'LBO_Sweep_2_8_46_19_posix.mat'
-# mat_path = base_path / 'LBO_Sweep_2_8_46_19.mat'
+# base_path = Path(r'data\03_09_D_88mm_350mm')
+# tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
+# mat_path = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
 
-# plot_U_ER()
-# plot_pmt(True)
-# plot_massflows()
+# # base_path = Path(r'data\03_09_D_88mm_350mm')
+# # tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
+# # mat_path = base_path / 'LBO_Sweep_2_8_46_19.mat'
+
+# flow_data_df = load_tdms_data(tdms_path)
+# pmt_pressure_data_df = load_mat_data(mat_path)
+
+# fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
+# pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
+# ax1.set_title("PMT vs Time")
+# ax1.set_xlabel("Time")
+# ax1.set_ylabel("PMT")
+# ax1.grid(True, which="both", linestyle="--", alpha=0.4)
+# ax1.legend()
+
+# pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='P1', linewidth=1)
+# ax2.set_title("Mass Flow vs Time")
+# ax2.set_xlabel("Time")
+# ax2.set_ylabel("Mass flow")
+# ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+# ax2.legend()
+
+# fig.tight_layout()
+# ax2.set_xlim(ax1.get_xlim())
+# plt.show()
+
+# calculate_U_ER(pmt_pressure_data_df,flow_data_df,True)
