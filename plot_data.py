@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import re
+from matplotlib.lines import Line2D
 
 
 def extract_dims(folder_name: str):
@@ -14,8 +15,6 @@ def extract_dims(folder_name: str):
     if len(mm_nums) >= 2:
         return int(mm_nums[0]), int(mm_nums[1])
     return None, None
-
-from matplotlib.lines import Line2D
 
 def make_height_colors(H_series, nan_color="0.5"):
     """Return (color_for_height_fn, legend_handles)."""

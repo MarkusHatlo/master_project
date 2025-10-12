@@ -1,3 +1,19 @@
+from typing import List, Dict
+
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import scipy.io as sio
+import re
+
+
+from scipy.signal import find_peaks, savgol_filter
+from scipy import signal
+from datetime import datetime, timedelta
+from pathlib import Path
+from nptdms import TdmsFile
+from collections import defaultdict
+
 def plot_fft():
     base_path = Path(r'data\03_09_D_88mm_350mm')
     tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'

@@ -6,6 +6,9 @@ import pandas as pd
 import scipy.io as sio
 import re
 
+
+from scipy.signal import find_peaks, savgol_filter
+from scipy import signal
 from datetime import datetime, timedelta
 from pathlib import Path
 from nptdms import TdmsFile
@@ -243,6 +246,137 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     # ax.set_ylabel('Velocity [m/s]')
     # plt.show()
 
+def detect_pmt_peaks(df, col='PMT',
+                     smooth_ms=10,         # small smoothing for noise
+                     baseline_ms=300,      # rolling-median baseline removal
+                     min_distance_s=0.30,  # refractory time between peaks
+                     min_width_ms=10,      # discard ultra-narrow blips
+                     prominence_sigma=10.0, # how strong above noise
+                     rel_height=0.5):      # width at 50% prominence
+    """
+    df: DataFrame with columns ['timestamps', col]
+    Returns: peaks_df with timestamp, height, prominence, width_s, left_base_ts, right_base_ts
+    """
+    ts = pd.to_datetime(df['timestamps'])
+    x  = df[col].to_numpy(dtype=float)
+
+    # --- sampling rate ---
+    dt = np.median(np.diff(ts.view('int64'))) / 1e9  # seconds
+    fs = 1.0 / dt
+
+    # --- baseline remove with rolling median (robust to outliers) ---
+    win_baseline = max(3, int(round(baseline_ms/1000 * fs)))
+    baseline = pd.Series(x).rolling(win_baseline, center=True, min_periods=1).median().to_numpy()
+    y = x - baseline
+
+    # --- light smoothing to tame high-freq noise (keeps peak timing) ---
+    if smooth_ms and smooth_ms > 0:
+        w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
+        y = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
+
+    # --- robust noise estimate (MAD) to set data-driven prominence ---
+    med = np.median(y)
+    sigma = 1.4826 * np.median(np.abs(y - med))
+    min_prom = max(1e-3, prominence_sigma * sigma)
+
+    distance = int(round(min_distance_s * fs))
+    min_width = max(1, int(round(min_width_ms/1000 * fs)))
+
+    idx, props = find_peaks(
+        y,
+        prominence=min_prom,
+        distance=distance,
+        width=min_width,
+        rel_height=rel_height
+    )
+
+    # Optional: refine each peak to the local maximum in the raw signal
+    # (in case smoothing shifted it slightly)
+    if idx.size:
+        halfw = max(1, int(0.02 * fs))  # search ±20 ms
+        ref = []
+        for i in idx:
+            lo = max(0, i-halfw); hi = min(len(x), i+halfw+1)
+            i_ref = lo + np.argmax(x[lo:hi])
+            ref.append(i_ref)
+        idx = np.array(ref, dtype=int)
+
+    # Build result table
+    widths_s = props['widths'] * dt
+    left_b   = props['left_bases'].astype(int, copy=False)
+    right_b  = props['right_bases'].astype(int, copy=False)
+
+    peaks_df = pd.DataFrame({
+        'idx': idx,
+        'timestamp': ts.to_numpy()[idx],
+        'height': x[idx],
+        'prominence': props['prominences'],
+        'width_s': widths_s,
+        'left_base_ts': ts.to_numpy()[left_b],
+        'right_base_ts': ts.to_numpy()[right_b],
+    })
+
+    return peaks_df
+
+def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
+    # sort just in case
+    ts = pd.to_datetime(peaks_df[timestamp_col]).sort_values().reset_index(drop=True)
+    if len(ts) < 2:
+        raise ValueError("Need at least two peaks to compute intervals/frequency.")
+
+    # periods (s) between peaks
+    periods_s = ts.diff().dt.total_seconds().iloc[1:].to_numpy()
+
+    # instantaneous frequencies (Hz)
+    freq_inst = 1.0 / periods_s
+
+    # summary stats
+    period_mean = periods_s.mean()
+    period_std  = periods_s.std(ddof=1) if len(periods_s) > 1 else 0.0     # sample std
+
+    # Preferred overall frequency estimate: invert mean period (less biased)
+    freq_mean = 1.0 / period_mean
+    # Also report the mean of instantaneous frequencies (sometimes people want this)
+    freq_mean_inst = freq_inst.mean()
+    # Std of instantaneous frequency
+    freq_std = freq_inst.std(ddof=1) if len(freq_inst) > 1 else 0.0
+
+    # Robust (median / MAD) in case of outliers
+    period_med = np.median(periods_s)
+    period_mad = 1.4826 * np.median(np.abs(periods_s - period_med))
+    freq_med   = np.median(freq_inst)
+    freq_mad   = 1.4826 * np.median(np.abs(freq_inst - freq_med))
+
+    return {
+        "n_peaks": len(ts),
+        "n_intervals": len(periods_s),
+        "periods_s": periods_s,           # array
+        "freq_inst_Hz": freq_inst,        # array
+        "period_mean_s": float(period_mean),
+        "period_std_s": float(period_std),
+        "period_median_s": float(period_med),
+        "period_MAD_s": float(period_mad),
+        "freq_mean_Hz": float(freq_mean),             # recommended point estimate
+        "freq_mean_inst_Hz": float(freq_mean_inst),   # mean of 1/period
+        "freq_std_Hz": float(freq_std),
+        "freq_median_Hz": float(freq_med),
+        "freq_MAD_Hz": float(freq_mad),
+    }
+
+def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFileName: str, tdmsFileName: str):
+    fig, ax = plt.subplots(1, 1, figsize=(11, 3.5))
+    ax.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
+    ax.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
+    ax.set_title("PMT vs Time (with peaks)")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("PMT")
+    ax.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(fr'C:\Users\marha\Documents\Skole\master_project\pictures\{matFileName} and  {tdmsFileName}.png')
+    plt.close()
+    return
+
 def load_tdms_data(tdms_path: Path):
     #load the tdms data
     assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -308,39 +442,90 @@ def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float,time
         "velocity": float(velocity),
         "time_diff" : time_diff
     })
-crossing_threshold = 0
 
-def main():
-    # Choose a threshold for "near zero" (1% of max is a decent default)
+# Choose a threshold for "near zero" (1% of max is a decent default)
+crossing_threshold = 0
+def main(do_LBO = False, do_Freq = False ):
 
     base_path = Path(r'data')
     files = iter_data_files(base_path, True)
 
+    #Find the pairs in the code
     pairs, um_mats, um_tdms = pair_mat_tdms(
         files,
         tolerance_seconds=55,   # tweak if needed
         group_by_dir=True
     )
-    unpaired = 0
-    no_zero_cross = 0
+    
+    #To track unused files
     total_files = len(pairs)
+    no_zero_cross = 0
+    freq_fail     = 0
+    freq_rows     = []
+
+
+    #Main code
     for file_idx, (mat, tdms) in enumerate(pairs):
+        log_no = get_log_no(tdms.stem)
         print(f'Files processed {file_idx+1}/{total_files}')
         print("PAIR:", mat.name, "<->", tdms.name)
-        if (n := get_log_no(tdms.stem)) in {1,2,3}:
-            print('Files are LBO')
+
+        # ------- LBO path: logs 1–3 -------
+        if do_LBO and log_no in {1,2,3}:
+            print('LBO candidate (log 1-3)')
             flow_data_df = load_tdms_data(tdms)
             pmt_pressure_data_df = load_mat_data(mat)
+            
             result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
             if result == (None, None, None):
                 no_zero_cross += 1
-                # e.g., continue to next file
+                #continue to next file
                 continue
+            
             ER_pair, U_pair, time_difference = result
             record_pair(mat, tdms, ER_pair, U_pair, time_difference)
-        else:
-            print('Log is not 1,2 or 3')
+        
+        # ------- Frequency path: logs 4–6 -------
+        elif do_Freq and log_no in {4}:
+            print('Frequency candidate (log 4-6)')
+            pmt_pressure_data_df = load_mat_data(mat)
 
+            try:
+                print('Detecting peaks')
+                peaks = detect_pmt_peaks(pmt_pressure_data_df)
+                print('Plotting')
+                plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem)
+                print('Calculating freq')
+                stats = peak_period_frequency(peaks)
+            except ValueError:
+                freq_fail += 1
+                print("Not enough peaks to compute frequency; skipping.")
+                continue
+            except Exception as e:
+                freq_fail += 1
+                print(f"Peak/frequency computation failed: {e}")
+                continue
+
+            print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
+                  f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
+
+            # collect for CSV
+            freq_rows.append({
+                "folder": mat.parent.name,
+                "mat_file": mat.name,
+                "tdms_file": tdms.name,
+                "log_no": log_no,
+                "n_peaks": stats["n_peaks"],
+                "n_intervals": stats["n_intervals"],
+                "freq_mean_Hz": stats["freq_mean_Hz"],
+                "freq_std_Hz": stats["freq_std_Hz"],
+                "freq_median_Hz": stats["freq_median_Hz"],
+                "freq_MAD_Hz": stats["freq_MAD_Hz"],
+            })
+
+
+    # ------- Count and present unpaired files -------
+    unpaired = 0
     if um_mats:
         print("\nUnmatched MAT:")
         for p in um_mats:
@@ -353,43 +538,184 @@ def main():
             unpaired += 1
 
     # ---- After the loop finishes ----
-    script_dir = Path(__file__).resolve().parent
-    out_csv = script_dir / "post_process_data.csv"
-    csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
-    csv_df.to_csv(out_csv, index=False)
-    print(f"Saved {len(csv_df)} rows to {out_csv}")
-    print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
+    if do_LBO and csv_rows:    
+        script_dir = Path(__file__).resolve().parent
+        out_csv = script_dir / "post_process_data.csv"
+        csv_df = pd.DataFrame(csv_rows, columns=["folder","mat_file","tdms_file","pairing","time_diff","log","er_est","ER","velocity"])
+        csv_df.to_csv(out_csv, index=False)
+        print(f"Saved {len(csv_df)} rows to {out_csv}")
+        print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
 
-main()
-#-------------------------------------------------------------------------------------------
+    if do_Freq and freq_rows:
+        out = Path("freq_results.csv")
+        write_header = not out.exists()
+        pd.DataFrame(freq_rows).to_csv(
+            out, index=False,
+            mode='a' if not write_header else 'w',
+            header=write_header
+        )
+        print(f"Saved {len(freq_rows)} frequency rows to {out}")
+
+
+    print(f'No-zero-cross (LBO) skipped: {no_zero_cross}')
+    print(f'Frequency failures (not enough peaks): {freq_fail}')
+    print(f'Unpaired files: {unpaired}')
+
+
+main(False, True)
+
+
+
+
+
+
+def plot_fft():
+    base_path = Path(r'data\03_09_D_88mm_350mm')
+    tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
+    mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
+
+    print("PAIR:", mat_path.name, "<->", tdms_path.name)
+
+    flow_data_df         = load_tdms_data(tdms_path)
+    pmt_pressure_data_df = load_mat_data(mat_path)
+
+    # --- sampling interval from timestamps (seconds) ---
+    ts = pmt_pressure_data_df['timestamps']
+    dt = ts.diff().dt.total_seconds().median()
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError("Cannot determine a positive sampling interval from timestamps.")
+    fs = 1.0 / dt
+
+    # --- get signal, sanitize NaNs, detrend (removes DC + slow drift) ---
+    x = pmt_pressure_data_df['PMT'].to_numpy(dtype=float)
+    # Fill NaNs with median to avoid reintroducing DC later
+    med = np.nanmedian(x)
+    x = np.nan_to_num(x, nan=med)
+
+    # Remove linear trend (use 'constant' if you only want mean removal)
+    x = signal.detrend(x, type='linear')
+
+    N = x.size
+
+    # --- windowing (use FFT-style window) ---
+    w = signal.windows.hann(N, sym=False)
+    xw = x * w
+
+    # --- FFT (one-sided) ---
+    X = np.fft.rfft(xw)
+    f = np.fft.rfftfreq(N, d=dt)
+
+    # --- amplitude scaling (so a sine of amplitude A shows ~A/2 at its single bin) ---
+    # Coherent gain of the window
+    cg = w.mean()                   # = sum(w)/N
+    amp = (2.0 / N) * np.abs(X) / cg
+    if N % 2 == 0:
+        amp[-1] /= 2.0              # halve Nyquist bin for even N
+
+    # fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
+    # pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
+    # ax1.set_title("PMT vs Time")
+    # ax1.set_xlabel("Time")
+    # ax1.set_ylabel("PMT")
+    # ax1.grid(True, which="both", linestyle="--", alpha=0.4)
+    # ax1.legend()
+
+    # flow_data_df.plot(ax=ax2, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
+    # ax2.set_title("Mass Flow vs Time")
+    # ax2.set_xlabel("Time")
+    # ax2.set_ylabel("Mass flow")
+    # ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+    # ax2.legend()
+
+    # fig.tight_layout()
+    # ax2.set_xlim(ax1.get_xlim())
+    # plt.show()
+
+
+    # --- plot FFT alone ---
+    plt.figure(figsize=(10, 4))
+    plt.plot(f, amp, label='|X(f)|')
+    plt.title("PMT Amplitude Spectrum")
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("Amplitude [a.u.]")
+    plt.grid(True, which="both", linestyle="--", alpha=0.4)
+    plt.xlim(0, fs/2)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 # base_path = Path(r'data\03_09_D_88mm_350mm')
-# tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
-# mat_path = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
+# mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
+# pmt_pressure_peak_df = load_mat_data(mat_path)
 
-# # base_path = Path(r'data\03_09_D_88mm_350mm')
-# # tdms_path = base_path / 'ER1_0,65_Log2_03.09.2025_08.46.16.tdms'
-# # mat_path = base_path / 'LBO_Sweep_2_8_46_19.mat'
 
-# flow_data_df = load_tdms_data(tdms_path)
-# pmt_pressure_data_df = load_mat_data(mat_path)
+def plot_peak_frequency(peaks_df, ts_col='timestamp', roll_window=5):
+    """
+    Plots instantaneous frequency between detected peaks.
+    Returns a dict of summary stats.
+    """
+    pdf = peaks_df.sort_values(ts_col).reset_index(drop=True).copy()
+    ts = pd.to_datetime(pdf[ts_col])
 
-# fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
-# pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
-# ax1.set_title("PMT vs Time")
-# ax1.set_xlabel("Time")
-# ax1.set_ylabel("PMT")
-# ax1.grid(True, which="both", linestyle="--", alpha=0.4)
-# ax1.legend()
+    # periods (s) and instantaneous frequency (Hz)
+    dt_s = ts.diff().dt.total_seconds()
+    f = 1.0 / dt_s
+    f = f.replace([np.inf, -np.inf], np.nan)
 
-# pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='P1', linewidth=1)
-# ax2.set_title("Mass Flow vs Time")
-# ax2.set_xlabel("Time")
-# ax2.set_ylabel("Mass flow")
-# ax2.grid(True, which="both", linestyle="--", alpha=0.4)
-# ax2.legend()
+    # drop the first NaN (no previous peak)
+    valid = f.notna()
+    t_valid = ts[valid]
+    f_valid = f[valid]
 
-# fig.tight_layout()
-# ax2.set_xlim(ax1.get_xlim())
-# plt.show()
+    if len(f_valid) == 0:
+        raise ValueError("Need at least two peaks to compute frequency.")
 
-# calculate_U_ER(pmt_pressure_data_df,flow_data_df,True)
+    # rolling median smoother (robust to outliers)
+    f_roll = f_valid.rolling(roll_window, center=True, min_periods=1).median()
+
+    # summary stats
+    f_mean = float(f_valid.mean())
+    f_std  = float(f_valid.std(ddof=1)) if len(f_valid) > 1 else 0.0
+    f_med  = float(np.median(f_valid))
+    f_mad  = float(1.4826 * np.median(np.abs(f_valid - f_med)))
+
+    # ---- plot ----
+    fig, ax = plt.subplots(1, 1, figsize=(11, 3.5))
+    ax.plot(t_valid, f_valid, marker='o', ms=3, lw=1, label='Instantaneous freq')
+    ax.plot(t_valid, f_roll, lw=2, label=f'Rolling median (w={roll_window})')
+    ax.axhline(f_mean, lw=1.5, linestyle='--', label=f'Mean = {f_mean:.3f} Hz')
+    ax.fill_between(t_valid, f_mean - f_std, f_mean + f_std, alpha=0.15, label='±1σ')
+
+    ax.set_title("Instantaneous Peak Frequency")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Frequency [Hz]")
+    ax.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+    return {
+        "n_peaks": int(len(pdf)),
+        "n_intervals": int(len(f_valid)),
+        "freq_mean_Hz": f_mean,
+        "freq_std_Hz": f_std,
+        "freq_median_Hz": f_med,
+        "freq_MAD_Hz": f_mad,
+    }
+
+
+# main()
+
+# plot_fft()
+
+# peaks = plot_with_peaks(pmt_pressure_peak_df)
+
+
+
+# stats = plot_peak_frequency(peaks)
+# print(stats)
+
+# stats = peak_period_frequency(peaks)
+
+# print("Mean frequency (Hz):", stats["freq_mean_Hz"])
+# print("Std of inst. freq (Hz):", stats["freq_std_Hz"])
