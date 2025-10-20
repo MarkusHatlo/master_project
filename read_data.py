@@ -6,7 +6,7 @@ import pandas as pd
 import scipy.io as sio
 import re
 
-
+from scipy import fft as sfft
 from scipy.signal import find_peaks, savgol_filter
 from scipy import signal
 from datetime import datetime, timedelta
@@ -644,26 +644,157 @@ def plot_fft_draft():
     plt.tight_layout()
     plt.show()
 
-def plot_fft():
-    base_path = Path(r'data\03_09_D_88mm_350mm')
-    tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
-    mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
 
-    print("PAIR:", mat_path.name, "<->", tdms_path.name)
+def calculate_fft_draft2(input_signal, input_time,fft_fs: float):
 
-    # flow_data_df         = load_tdms_data(tdms_path)
-    pmt_df = load_mat_data(mat_path)
+    N = len(input_signal)
 
-    ts = pmt_df['timestamps']
-    pmt = pmt_df['PMT']
+    w = signal.windows.hann(N, sym=False)
+    input_signal_w = input_signal*w
 
-    fig, ax = plt.subplots(1, 1, figsize=(10,5))
+    Nfft  = sfft.next_fast_len(N)
 
-    ax.plot(ts,pmt)
-    ax.set_title('PMT data')
-    ax.set_ylabel('PMT signal')
-    ax.set_xlabel('Time')
-    ax.grid(True, which="both", linestyle="--", alpha=0.4)
+    fft_output = sfft.rfft(input_signal, n=Nfft)
+    freq  = sfft.rfftfreq(N, d=1/fft_fs)
 
-    plt.tight_layout
-    plt.show()
+    amp = (2.0 / len(input_signal)) * np.abs(fft_output)  # double everything and normalize by N
+    if len(input_signal) % 2 == 0:                # even N → Nyquist bin exists at the end
+        amp[-1] /= 2                   # undo doubling for Nyquist
+    amp[0] /= 2                        # undo doubling for DC
+
+    window_length = len(input_signal) // 16
+    window_overlap = window_length // 2
+
+    f_welch, Pxx = signal.welch(input_signal,fs=fft_fs,window='hann',nperseg=window_length,noverlap=window_overlap)
+
+    # --- Plots ---
+    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, figsize=(10,5))
+
+    ax1.plot(input_time,input_signal)
+    ax1.set_title('PMT data')
+    ax1.set_ylabel('PMT signal')
+    ax1.set_xlabel('Time')
+
+    ax2.plot(freq,amp)
+    ax2.set_xlim(1,500)
+    ax2.set_title('FFT data')
+    ax2.set_ylabel('FFT of PMT signal')
+    ax2.set_xlabel('Frequency [Hz]')
+
+    ax3.plot(f_welch,Pxx)
+    ax3.set_title('Power spectral density')
+    ax3.set_ylabel('Power spectral density')
+    ax3.set_xlabel('Frequency [Hz]')
+
+    plt.grid(True, which="both", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+
+def calculate_fft(input_signal, input_time, fft_fs: float, lowpass_cutoff: float = None):
+    # --- prep ---
+    x = np.asarray(input_signal, float)
+    x = x - np.mean(x)                      # remove DC
+
+    N    = len(x)
+    w    = signal.windows.hann(N, sym=False)
+    cg   = w.mean()                         # coherent gain for amplitude fix
+    xw   = x * w
+
+    Nfft = sfft.next_fast_len(N)
+
+    # --- FFT (use the windowed data) ---
+    Xr   = sfft.rfft(xw, n=Nfft)
+    f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
+
+    filtered_signal = None
+    if lowpass_cutoff is not None:
+        # Filter on the original signal (not windowed) for time-domain output
+        x_fft = sfft.rfft(x, n=Nfft)
+        x_fft[f > lowpass_cutoff] = 0
+        filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
+        
+        # Also filter the FFT display
+        Xr[f > lowpass_cutoff] = 0
+    
+    # one-sided peak amplitude scaling, corrected for window
+    amp = (2.0 / (N * cg)) * np.abs(Xr)
+    if N % 2 == 0:      # Nyquist bin has no mirror
+        amp[-1] /= 2
+    amp[0] /= 2         # DC shouldn't be doubled
+
+    # --- Welch PSD ---
+    nperseg  = min(max(256, N // 16), N)    # ~1/16 of record, floor at 256
+    noverlap = min(nperseg // 2, nperseg - 1)
+
+    f_welch, Pxx = signal.welch(
+        x,
+        fs=fft_fs,
+        window='hann',
+        nperseg=nperseg,
+        noverlap=noverlap,
+        detrend='constant',
+        scaling='density',
+        return_onesided=True
+    )
+
+    # --- Plots ---
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
+
+    ax1.plot(input_time, x)
+    if filtered_signal is not None:
+        ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
+        ax1.legend()
+    ax1.set_title('PMT data')
+    ax1.set_ylabel('PMT signal')
+    ax1.set_xlabel('Time')
+
+    ax2.plot(f, amp)
+    title = 'FFT amplitude (Hann-windowed)'
+    ax2.set_xlim(0,10)
+    if lowpass_cutoff is not None:
+        title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
+        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
+        ax2.legend()
+        ax2.set_xlim(0,lowpass_cutoff)
+    ax2.set_title(title)
+    ax2.set_ylabel('Amplitude [peak]')
+    ax2.set_xlabel('Frequency [Hz]')
+    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+
+    ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
+    ax3.set_title('Power spectral density (Welch)')
+    ax3.set_xlim(0,10)
+    if lowpass_cutoff is not None:
+        ax3.set_xlim(0,lowpass_cutoff)
+    ax3.set_ylabel('PSD [units²/Hz]')
+    ax3.set_xlabel('Frequency [Hz]')
+    ax3.grid(True, which="both", linestyle="--", alpha=0.4)
+
+    plt.tight_layout()
+
+
+
+
+# base_path = Path(r'data\03_09_D_88mm_350mm')
+# tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
+# mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
+
+
+base_path = Path(r'data\03_09_D_88mm_350mm')
+tdms_path = base_path / 'ER1_0,71_Log4_04.09.2025_09.10.18.tdms'
+mat_path  = base_path / 'Up_20_ERp_0.71_PH2p_0_9_10_22.mat'
+
+
+print("PAIR:", mat_path.name, "<->", tdms_path.name)
+
+# flow_data_df         = load_tdms_data(tdms_path)
+pmt_df = load_mat_data(mat_path)
+
+ts_pmt = pmt_df['timestamps']
+d = ts_pmt.diff().dt.total_seconds().median()
+fs_pmt = 1.0 / d
+
+pmt_raw = pmt_df['PMT']
+pmt = pmt_raw - np.mean(pmt_raw)
+
+calculate_fft(pmt,ts_pmt,fs_pmt)
+plt.show()

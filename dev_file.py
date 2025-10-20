@@ -306,3 +306,19 @@ def plot_peak_frequency(peaks_df, ts_col='timestamp', roll_window=5):
 
 # print("Mean frequency (Hz):", stats["freq_mean_Hz"])
 # print("Std of inst. freq (Hz):", stats["freq_std_Hz"])
+
+# ---------------------------------------------------------------------------------------------------
+# --- Test Signal ---
+fs = 1000        # Sampling frequency [Hz]
+T = 1.0          # Duration [s]
+f_sig = 50       # Signal frequency [Hz]
+amplitude = 1.0
+noise_level = 0.5  # set >0 for noise, e.g. 0.2
+
+# --- Time vector ---
+t_sin = np.arange(0, T, 1/fs)
+
+# --- Signal: sine wave + optional noise ---
+y_sin = amplitude*2 * np.sin(2 * np.pi * f_sig * t_sin) + noise_level * np.random.randn(len(t_sin)) + amplitude * np.sin(2 * np.pi * 100 * t_sin)
+# ---------------------------------------------------------------------------------------------------
+# calculate_fft(y_sin,t_sin,fs)
