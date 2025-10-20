@@ -44,31 +44,6 @@ def marker_for_diameter(D):
     if d == 120: return "^"   # triangle
     return "o"                # default
 
-# Legend proxies for marker shapes (use neutral color so meaning is clear)
-marker_handles = [
-    Line2D([0], [0], marker="s", linestyle="", color="0.2", markersize=8, label="D = 100 mm"),
-    Line2D([0], [0], marker="^", linestyle="", color="0.2", markersize=8, label="D = 120 mm"),
-    Line2D([0], [0], marker="o", linestyle="", color="0.2", markersize=8, label="D = 88 mm"),
-]
-
-
-# --- Load ---
-df = pd.read_csv("post_process_data.csv")
-
-# Keep only Log 1-3 and rows with an estimated ER to group logs together
-df = df[df["log"].isin([1, 2, 3])].dropna(subset=["er_est"])
-
-# --- Average within each folder & estimated ER ---
-# We take the MEAN of the *calculated* ER and U across logs 1-3
-avg = (df.groupby(["folder", "er_est"], as_index=False)
-         .agg(ER_mean=("ER", "mean"),
-              U_mean=("velocity", "mean")))
-
-# Optional: nicer legend labels with D/H if present in folder name
-dims = avg["folder"].apply(extract_dims)
-avg["D_mm"] = [d for d, h in dims]
-avg["H_mm"] = [h for d, h in dims]
-
 def plot_all():
     # --- Plot: mean U vs mean (calculated) ER, one line per folder ---
     plt.figure(figsize=(10, 5))
@@ -171,6 +146,33 @@ def plot_split_by_D(target_D=88, show_folder_legends=False):
     fig.suptitle("Mean velocity vs Equivalence ratio")
     fig.tight_layout(rect=[0.02, 0.18, 0.98, 0.92])  # [left, bottom, right, top]  
     plt.show()
+
+# Legend proxies for marker shapes (use neutral color so meaning is clear)
+marker_handles = [
+    Line2D([0], [0], marker="s", linestyle="", color="0.2", markersize=8, label="D = 100 mm"),
+    Line2D([0], [0], marker="^", linestyle="", color="0.2", markersize=8, label="D = 120 mm"),
+    Line2D([0], [0], marker="o", linestyle="", color="0.2", markersize=8, label="D = 88 mm"),
+]
+
+
+
+# --- Load ---
+df = pd.read_csv("post_process_data.csv")
+
+# Keep only Log 1-3 and rows with an estimated ER to group logs together
+df = df[df["log"].isin([1, 2, 3])].dropna(subset=["er_est"])
+
+# --- Average within each folder & estimated ER ---
+# We take the MEAN of the *calculated* ER and U across logs 1-3
+avg = (df.groupby(["folder", "er_est"], as_index=False)
+         .agg(ER_mean=("ER", "mean"),
+              U_mean=("velocity", "mean")))
+
+# Optional: nicer legend labels with D/H if present in folder name
+dims = avg["folder"].apply(extract_dims)
+avg["D_mm"] = [d for d, h in dims]
+avg["H_mm"] = [h for d, h in dims]
+
 
 
 # plot_all()

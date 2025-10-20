@@ -228,3 +228,81 @@ def plot_peak_frequency(peaks_df, ts_col='timestamp', roll_window=5):
 # plt.show()
 
 # calculate_U_ER(pmt_pressure_data_df,flow_data_df,True)
+
+# --------------------------------------------------------------------------------------
+
+# base_path = Path(r'data\03_09_D_88mm_350mm')
+# mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
+# pmt_pressure_peak_df = load_mat_data(mat_path)
+
+
+def plot_peak_frequency(peaks_df, ts_col='timestamp', roll_window=5):
+    """
+    Plots instantaneous frequency between detected peaks.
+    Returns a dict of summary stats.
+    """
+    pdf = peaks_df.sort_values(ts_col).reset_index(drop=True).copy()
+    ts = pd.to_datetime(pdf[ts_col])
+
+    # periods (s) and instantaneous frequency (Hz)
+    dt_s = ts.diff().dt.total_seconds()
+    f = 1.0 / dt_s
+    f = f.replace([np.inf, -np.inf], np.nan)
+
+    # drop the first NaN (no previous peak)
+    valid = f.notna()
+    t_valid = ts[valid]
+    f_valid = f[valid]
+
+    if len(f_valid) == 0:
+        raise ValueError("Need at least two peaks to compute frequency.")
+
+    # rolling median smoother (robust to outliers)
+    f_roll = f_valid.rolling(roll_window, center=True, min_periods=1).median()
+
+    # summary stats
+    f_mean = float(f_valid.mean())
+    f_std  = float(f_valid.std(ddof=1)) if len(f_valid) > 1 else 0.0
+    f_med  = float(np.median(f_valid))
+    f_mad  = float(1.4826 * np.median(np.abs(f_valid - f_med)))
+
+    # ---- plot ----
+    fig, ax = plt.subplots(1, 1, figsize=(11, 3.5))
+    ax.plot(t_valid, f_valid, marker='o', ms=3, lw=1, label='Instantaneous freq')
+    ax.plot(t_valid, f_roll, lw=2, label=f'Rolling median (w={roll_window})')
+    ax.axhline(f_mean, lw=1.5, linestyle='--', label=f'Mean = {f_mean:.3f} Hz')
+    ax.fill_between(t_valid, f_mean - f_std, f_mean + f_std, alpha=0.15, label='±1σ')
+
+    ax.set_title("Instantaneous Peak Frequency")
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Frequency [Hz]")
+    ax.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+    return {
+        "n_peaks": int(len(pdf)),
+        "n_intervals": int(len(f_valid)),
+        "freq_mean_Hz": f_mean,
+        "freq_std_Hz": f_std,
+        "freq_median_Hz": f_med,
+        "freq_MAD_Hz": f_mad,
+    }
+
+
+# main()
+
+# plot_fft()
+
+# peaks = plot_with_peaks(pmt_pressure_peak_df)
+
+
+
+# stats = plot_peak_frequency(peaks)
+# print(stats)
+
+# stats = peak_period_frequency(peaks)
+
+# print("Mean frequency (Hz):", stats["freq_mean_Hz"])
+# print("Std of inst. freq (Hz):", stats["freq_std_Hz"])
