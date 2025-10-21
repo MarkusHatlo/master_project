@@ -251,7 +251,7 @@ def detect_pmt_peaks(df, col='PMT',
                      baseline_ms=300,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
-                     prominence_sigma=10.0, # how strong above noise
+                     prominence_sigma=7.0, # how strong above noise
                      rel_height=0.5):      # width at 50% prominence
     """
     df: DataFrame with columns ['timestamps', col]
@@ -363,7 +363,7 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
         "freq_MAD_Hz": float(freq_mad),
     }
 
-def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFileName: str, tdmsFileName: str):
+def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str):
     fig, ax = plt.subplots(1, 1, figsize=(11, 3.5))
     ax.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
     ax.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
@@ -373,9 +373,143 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFil
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
     ax.legend()
     plt.tight_layout()
-    plt.savefig(fr'C:\Users\marha\Documents\Skole\master_project\pictures\{matFileName} and  {tdmsFileName}.png')
+
+    picture_path = Path('pictures')
+    out_dir = picture_path / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
+    fig.savefig(out_path, dpi=300,bbox_inches='tight')
     plt.close()
+    
     return
+
+def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str, folderName: str, lowpass_cutoff: float = None):
+    # --- prep ---
+
+    if hasattr(input_time, "diff"):
+        d = input_time.diff().dt.total_seconds().median()
+    else:
+        raise ValueError("input_time must be a pandas Series of datetimes.")
+    if d is None or np.isnan(d) or d <= 0:
+        raise ValueError(f"Bad time step (median Δt = {d}); cannot compute sampling rate.")
+    fft_fs = 1.0 / d
+
+    nyq = 0.5 * fft_fs
+    if lowpass_cutoff is not None:
+        if not (0 < lowpass_cutoff < nyq):
+            raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
+
+
+    x = np.asarray(input_signal, float)
+    x = x - np.mean(x)                      # remove DC
+
+    N    = len(x)
+    w    = signal.windows.hann(N, sym=False)
+    cg   = w.mean()                         # coherent gain for amplitude fix
+    xw   = x * w
+
+    Nfft = sfft.next_fast_len(N)
+
+    # --- FFT (use the windowed data) ---
+    Xr   = sfft.rfft(xw, n=Nfft)
+    f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
+
+    filtered_signal = None
+    if lowpass_cutoff is not None:
+        # Filter on the original signal (not windowed) for time-domain output
+        x_fft = sfft.rfft(x, n=Nfft)
+        x_fft[f > lowpass_cutoff] = 0
+        filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
+        
+        # Also filter the FFT display
+        Xr[f > lowpass_cutoff] = 0
+    
+    # one-sided peak amplitude scaling, corrected for window
+    amp = (2.0 / (N * cg)) * np.abs(Xr)
+    if N % 2 == 0:      # Nyquist bin has no mirror
+        amp[-1] /= 2
+    amp[0] /= 2         # DC shouldn't be doubled
+
+    # --- Welch PSD ---
+    nperseg  = min(max(256, N // 16), N)    # ~1/16 of record, floor at 256
+    noverlap = min(nperseg // 2, nperseg - 1)
+
+    f_welch, Pxx = signal.welch(
+        x,
+        fs=fft_fs,
+        window='hann',
+        nperseg=nperseg,
+        noverlap=noverlap,
+        detrend='constant',
+        scaling='density',
+        return_onesided=True
+    )
+    # --- dominant frequency (ignore DC); sub-bin parabolic refine ---
+    if amp.size > 3:
+        k0 = int(np.argmax(amp[1:])) + 1  # skip DC
+        if 1 <= k0 < len(amp) - 1:
+            # parabolic interpolation on log-amplitude for a smoother peak estimate
+            y1, y2, y3 = np.log(amp[k0-1] + 1e-16), np.log(amp[k0] + 1e-16), np.log(amp[k0+1] + 1e-16)
+            denom = (2*y2 - y1 - y3)
+            delta = 0.0 if denom == 0 else 0.5*(y1 - y3)/denom  # -1..+1 bin offset
+            f0 = f[k0] + delta*(f[1] - f[0])
+            a0 = np.exp(y2 - 0.25*(y1 - y3)*delta)  # interpolated peak amplitude (optional)
+        else:
+            f0 = f[k0]
+            a0 = amp[k0]
+    else:
+        f0, a0 = np.nan, np.nan
+
+    # --- Plots ---
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
+
+    ax1.plot(input_time, x)
+    if filtered_signal is not None:
+        ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
+        ax1.legend()
+    ax1.set_title('PMT data')
+    ax1.set_ylabel('PMT signal')
+    ax1.set_xlabel('Time')
+
+    ax2.plot(f, amp)
+    title = 'FFT amplitude (Hann-windowed)'
+    ax2.set_xlim(0,10)
+    if lowpass_cutoff is not None:
+        title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
+        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
+        ax2.legend()
+        ax2.set_xlim(0,lowpass_cutoff)
+
+    if np.isfinite(f0) and np.isfinite(a0):
+        ax2.plot([f0], [a0], 'o', markersize=6, label=f'Peak ~ {f0:.2f} Hz')
+        ax2.annotate(f'{f0:.2f} Hz', xy=(f0, a0), xytext=(5, 5),
+                    textcoords='offset points', fontsize=8)
+        ax2.legend(loc='best', fontsize=9)
+
+    ax2.set_title(title)
+    ax2.set_ylabel('Amplitude [peak]')
+    ax2.set_xlabel('Frequency [Hz]')
+    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+
+    ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
+    ax3.set_title('Power spectral density (Welch)')
+    ax3.set_xlim(0,10)
+    if lowpass_cutoff is not None:
+        ax3.set_xlim(0,lowpass_cutoff)
+    ax3.set_ylabel('PSD [units²/Hz]')
+    ax3.set_xlabel('Frequency [Hz]')
+    ax3.grid(True, which="both", linestyle="--", alpha=0.4)
+
+    plt.tight_layout()
+
+    picture_path = Path('pictures')
+    out_dir = picture_path / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    fig.savefig(out_path, dpi=300,bbox_inches='tight')
+    plt.close()
+    return {"fs_Hz": float(fft_fs), "N": int(N), "f0_Hz": float(f0)}
+
 
 def load_tdms_data(tdms_path: Path):
     #load the tdms data
@@ -428,26 +562,11 @@ def load_mat_data(mat_path: Path):
 
     return pmt_pressure_df
 
-csv_rows: List[Dict] = []
-def record_pair(file_mat: Path, file_tdms: Path, ER: float, velocity: float,time_diff):
-    tdms_stem = file_tdms.stem
-    csv_rows.append({
-        "folder": file_mat.parent.name,                 # folder name of file A
-        "mat_file": file_mat.name,                          # file A name
-        "tdms_file": file_tdms.name,                   # file B name (the pairing)
-        "pairing": f"{file_mat.stem} <> {tdms_stem}", # human-readable pairing label
-        "log": get_log_no(tdms_stem),
-        "er_est": get_er_est(tdms_stem),
-        "ER": float(ER),
-        "velocity": float(velocity),
-        "time_diff" : time_diff
-    })
-
 # Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0
-def main(do_LBO = False, do_Freq = False ):
+def main(do_LBO = False, do_Freq_FFT = False):
 
-    base_path = Path(r'data')
+    base_path = Path('data')
     files = iter_data_files(base_path, True)
 
     #Find the pairs in the code
@@ -461,7 +580,9 @@ def main(do_LBO = False, do_Freq = False ):
     total_files = len(pairs)
     no_zero_cross = 0
     freq_fail     = 0
+    fft_fail      = 0
     freq_rows     = []
+    csv_rows: List[Dict] = []
 
 
     #Main code
@@ -483,18 +604,30 @@ def main(do_LBO = False, do_Freq = False ):
                 continue
             
             ER_pair, U_pair, time_difference = result
-            record_pair(mat, tdms, ER_pair, U_pair, time_difference)
-        
-        # ------- Frequency path: logs 4–6 -------
-        elif do_Freq and log_no in {4}:
-            print('Frequency candidate (log 4-6)')
+
+            tdms_stem = tdms.stem
+            csv_rows.append({
+            "folder": mat.parent.name,                 # folder name of file A
+            "mat_file": mat.name,                          # file A name
+            "tdms_file": tdms.name,                   # file B name (the pairing)
+            "pairing": f"{mat.stem} <> {tdms_stem}", # human-readable pairing label
+            "log": log_no,
+            "er_est": get_er_est(tdms_stem),
+            "ER": float(ER_pair),
+            "velocity": float(U_pair),
+            "time_diff" : time_difference
+            })
+
+        # ------- Frequency path: logs 4 -------
+        elif do_Freq_FFT and log_no in {4}:
+            print('Frequency candidate (log 4)')
             pmt_pressure_data_df = load_mat_data(mat)
 
             try:
                 print('Detecting peaks')
                 peaks = detect_pmt_peaks(pmt_pressure_data_df)
                 print('Plotting')
-                plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem)
+                plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem, mat.parent.name)
                 print('Calculating freq')
                 stats = peak_period_frequency(peaks)
             except ValueError:
@@ -509,6 +642,25 @@ def main(do_LBO = False, do_Freq = False ):
             print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
                   f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
 
+            try:
+                print('Calculating FFT')
+                fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+                f0 = fft_stats["f0_Hz"]
+                if f0 is None or (isinstance(f0, float) and np.isnan(f0)):
+                    f0_print = float('nan')
+                else:
+                    f0_print = f0
+                print(f"FFT dominant ≈ {f0_print:.3f} Hz (fs={fft_stats['fs_Hz']:.3f} Hz, N={fft_stats['N']})")
+            except ValueError as e:
+                fft_fail += 1
+                print(f"Value error: {e}; skipping.")
+                continue
+            except Exception as e:
+                fft_fail += 1
+                print(f"FFT computation failed: {e}")
+                continue
+
+
             # collect for CSV
             freq_rows.append({
                 "folder": mat.parent.name,
@@ -521,6 +673,7 @@ def main(do_LBO = False, do_Freq = False ):
                 "freq_std_Hz": stats["freq_std_Hz"],
                 "freq_median_Hz": stats["freq_median_Hz"],
                 "freq_MAD_Hz": stats["freq_MAD_Hz"],
+                "fft_f0_Hz": f0,
             })
 
 
@@ -546,7 +699,7 @@ def main(do_LBO = False, do_Freq = False ):
         print(f"Saved {len(csv_df)} rows to {out_csv}")
         print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
 
-    if do_Freq and freq_rows:
+    if do_Freq_FFT and freq_rows:
         out = Path("freq_results.csv")
         write_header = not out.exists()
         pd.DataFrame(freq_rows).to_csv(
@@ -559,6 +712,7 @@ def main(do_LBO = False, do_Freq = False ):
 
     print(f'No-zero-cross (LBO) skipped: {no_zero_cross}')
     print(f'Frequency failures (not enough peaks): {freq_fail}')
+    print(f'FFT failures: {fft_fail}')
     print(f'Unpaired files: {unpaired}')
 
 
@@ -689,90 +843,6 @@ def calculate_fft_draft2(input_signal, input_time,fft_fs: float):
     plt.grid(True, which="both", linestyle="--", alpha=0.4)
     plt.tight_layout()
 
-def calculate_fft(input_signal, input_time, fft_fs: float, lowpass_cutoff: float = None):
-    # --- prep ---
-    x = np.asarray(input_signal, float)
-    x = x - np.mean(x)                      # remove DC
-
-    N    = len(x)
-    w    = signal.windows.hann(N, sym=False)
-    cg   = w.mean()                         # coherent gain for amplitude fix
-    xw   = x * w
-
-    Nfft = sfft.next_fast_len(N)
-
-    # --- FFT (use the windowed data) ---
-    Xr   = sfft.rfft(xw, n=Nfft)
-    f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
-
-    filtered_signal = None
-    if lowpass_cutoff is not None:
-        # Filter on the original signal (not windowed) for time-domain output
-        x_fft = sfft.rfft(x, n=Nfft)
-        x_fft[f > lowpass_cutoff] = 0
-        filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
-        
-        # Also filter the FFT display
-        Xr[f > lowpass_cutoff] = 0
-    
-    # one-sided peak amplitude scaling, corrected for window
-    amp = (2.0 / (N * cg)) * np.abs(Xr)
-    if N % 2 == 0:      # Nyquist bin has no mirror
-        amp[-1] /= 2
-    amp[0] /= 2         # DC shouldn't be doubled
-
-    # --- Welch PSD ---
-    nperseg  = min(max(256, N // 16), N)    # ~1/16 of record, floor at 256
-    noverlap = min(nperseg // 2, nperseg - 1)
-
-    f_welch, Pxx = signal.welch(
-        x,
-        fs=fft_fs,
-        window='hann',
-        nperseg=nperseg,
-        noverlap=noverlap,
-        detrend='constant',
-        scaling='density',
-        return_onesided=True
-    )
-
-    # --- Plots ---
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
-
-    ax1.plot(input_time, x)
-    if filtered_signal is not None:
-        ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
-        ax1.legend()
-    ax1.set_title('PMT data')
-    ax1.set_ylabel('PMT signal')
-    ax1.set_xlabel('Time')
-
-    ax2.plot(f, amp)
-    title = 'FFT amplitude (Hann-windowed)'
-    ax2.set_xlim(0,10)
-    if lowpass_cutoff is not None:
-        title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
-        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
-        ax2.legend()
-        ax2.set_xlim(0,lowpass_cutoff)
-    ax2.set_title(title)
-    ax2.set_ylabel('Amplitude [peak]')
-    ax2.set_xlabel('Frequency [Hz]')
-    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
-
-    ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
-    ax3.set_title('Power spectral density (Welch)')
-    ax3.set_xlim(0,10)
-    if lowpass_cutoff is not None:
-        ax3.set_xlim(0,lowpass_cutoff)
-    ax3.set_ylabel('PSD [units²/Hz]')
-    ax3.set_xlabel('Frequency [Hz]')
-    ax3.grid(True, which="both", linestyle="--", alpha=0.4)
-
-    plt.tight_layout()
-
-
-
 
 # base_path = Path(r'data\03_09_D_88mm_350mm')
 # tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
@@ -796,5 +866,9 @@ fs_pmt = 1.0 / d
 pmt_raw = pmt_df['PMT']
 pmt = pmt_raw - np.mean(pmt_raw)
 
-calculate_fft(pmt,ts_pmt,fs_pmt)
-plt.show()
+fft_stats = calculate_fft(pmt,ts_pmt,mat_path.stem, tdms_path.stem, mat_path.parent.name)
+f0 = fft_stats["f0_Hz"]
+if np.isnan(f0):
+    f0 = None
+print(f"FFT dominant ≈ {f0 if f0 is not None else float('nan'):.3f} Hz "
+    f"(fs={fft_stats['fs_Hz']:.3f} Hz, N={fft_stats['N']})")
