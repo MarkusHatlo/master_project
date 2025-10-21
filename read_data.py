@@ -716,7 +716,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
     print(f'Unpaired files: {unpaired}')
 
 
-# main(False, True)
+main(False, True)
 
 
 
