@@ -261,7 +261,7 @@ def detect_pmt_peaks(df, col='PMT',
     x  = df[col].to_numpy(dtype=float)
 
     # --- sampling rate ---
-    dt = np.median(np.diff(ts.view('int64'))) / 1e9  # seconds
+    dt = ts.diff().dt.total_seconds().median()
     fs = 1.0 / dt
 
     # --- baseline remove with rolling median (robust to outliers) ---
@@ -484,7 +484,7 @@ def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str,
         ax2.plot([f0], [a0], 'o', markersize=6, label=f'Peak ~ {f0:.2f} Hz')
         ax2.annotate(f'{f0:.2f} Hz', xy=(f0, a0), xytext=(5, 5),
                     textcoords='offset points', fontsize=8)
-        ax2.legend(loc='best', fontsize=9)
+        ax2.legend(fontsize=9)
 
     ax2.set_title(title)
     ax2.set_ylabel('Amplitude [peak]')
@@ -618,9 +618,9 @@ def main(do_LBO = False, do_Freq_FFT = False):
             "time_diff" : time_difference
             })
 
-        # ------- Frequency path: logs 4 -------
-        elif do_Freq_FFT and log_no in {4}:
-            print('Frequency candidate (log 4)')
+        # ------- Frequency path: logs 6 -------
+        elif do_Freq_FFT and log_no in {6}:
+            print('Frequency candidate (log 6)')
             pmt_pressure_data_df = load_mat_data(mat)
 
             try:
@@ -720,155 +720,3 @@ main(False, True)
 
 
 
-
-
-
-def plot_fft_draft():
-    base_path = Path(r'data\03_09_D_88mm_350mm')
-    tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
-    mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
-
-    print("PAIR:", mat_path.name, "<->", tdms_path.name)
-
-    flow_data_df         = load_tdms_data(tdms_path)
-    pmt_pressure_data_df = load_mat_data(mat_path)
-
-    # --- sampling interval from timestamps (seconds) ---
-    ts = pmt_pressure_data_df['timestamps']
-    dt = ts.diff().dt.total_seconds().median()
-    if not np.isfinite(dt) or dt <= 0:
-        raise ValueError("Cannot determine a positive sampling interval from timestamps.")
-    fs = 1.0 / dt
-
-    # --- get signal, sanitize NaNs, detrend (removes DC + slow drift) ---
-    x = pmt_pressure_data_df['PMT'].to_numpy(dtype=float)
-    # Fill NaNs with median to avoid reintroducing DC later
-    med = np.nanmedian(x)
-    x = np.nan_to_num(x, nan=med)
-
-    # Remove linear trend (use 'constant' if you only want mean removal)
-    x = signal.detrend(x, type='linear')
-
-    N = x.size
-
-    # --- windowing (use FFT-style window) ---
-    w = signal.windows.hann(N, sym=False)
-    xw = x * w
-
-    # --- FFT (one-sided) ---
-    X = np.fft.rfft(xw)
-    f = np.fft.rfftfreq(N, d=dt)
-
-    # --- amplitude scaling (so a sine of amplitude A shows ~A/2 at its single bin) ---
-    # Coherent gain of the window
-    cg = w.mean()                   # = sum(w)/N
-    amp = (2.0 / N) * np.abs(X) / cg
-    if N % 2 == 0:
-        amp[-1] /= 2.0              # halve Nyquist bin for even N
-
-    # fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
-    # pmt_pressure_data_df.plot(ax=ax1, x='timestamps', y='PMT', linewidth=1)
-    # ax1.set_title("PMT vs Time")
-    # ax1.set_xlabel("Time")
-    # ax1.set_ylabel("PMT")
-    # ax1.grid(True, which="both", linestyle="--", alpha=0.4)
-    # ax1.legend()
-
-    # flow_data_df.plot(ax=ax2, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
-    # ax2.set_title("Mass Flow vs Time")
-    # ax2.set_xlabel("Time")
-    # ax2.set_ylabel("Mass flow")
-    # ax2.grid(True, which="both", linestyle="--", alpha=0.4)
-    # ax2.legend()
-
-    # fig.tight_layout()
-    # ax2.set_xlim(ax1.get_xlim())
-    # plt.show()
-
-
-    # --- plot FFT alone ---
-    plt.figure(figsize=(10, 4))
-    plt.plot(f, amp, label='|X(f)|')
-    plt.title("PMT Amplitude Spectrum")
-    plt.xlabel("Frequency [Hz]")
-    plt.ylabel("Amplitude [a.u.]")
-    plt.grid(True, which="both", linestyle="--", alpha=0.4)
-    plt.xlim(0, fs/2)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-def calculate_fft_draft2(input_signal, input_time,fft_fs: float):
-
-    N = len(input_signal)
-
-    w = signal.windows.hann(N, sym=False)
-    input_signal_w = input_signal*w
-
-    Nfft  = sfft.next_fast_len(N)
-
-    fft_output = sfft.rfft(input_signal, n=Nfft)
-    freq  = sfft.rfftfreq(N, d=1/fft_fs)
-
-    amp = (2.0 / len(input_signal)) * np.abs(fft_output)  # double everything and normalize by N
-    if len(input_signal) % 2 == 0:                # even N → Nyquist bin exists at the end
-        amp[-1] /= 2                   # undo doubling for Nyquist
-    amp[0] /= 2                        # undo doubling for DC
-
-    window_length = len(input_signal) // 16
-    window_overlap = window_length // 2
-
-    f_welch, Pxx = signal.welch(input_signal,fs=fft_fs,window='hann',nperseg=window_length,noverlap=window_overlap)
-
-    # --- Plots ---
-    fig, [ax1, ax2, ax3] = plt.subplots(3, 1, figsize=(10,5))
-
-    ax1.plot(input_time,input_signal)
-    ax1.set_title('PMT data')
-    ax1.set_ylabel('PMT signal')
-    ax1.set_xlabel('Time')
-
-    ax2.plot(freq,amp)
-    ax2.set_xlim(1,500)
-    ax2.set_title('FFT data')
-    ax2.set_ylabel('FFT of PMT signal')
-    ax2.set_xlabel('Frequency [Hz]')
-
-    ax3.plot(f_welch,Pxx)
-    ax3.set_title('Power spectral density')
-    ax3.set_ylabel('Power spectral density')
-    ax3.set_xlabel('Frequency [Hz]')
-
-    plt.grid(True, which="both", linestyle="--", alpha=0.4)
-    plt.tight_layout()
-
-
-# base_path = Path(r'data\03_09_D_88mm_350mm')
-# tdms_path = base_path / 'ER1_0,65_Log5_03.09.2025_09.00.39.tdms'
-# mat_path  = base_path / 'Up_8_ERp_0.65_PH2p_0_8_59_1.mat'
-
-
-base_path = Path(r'data\03_09_D_88mm_350mm')
-tdms_path = base_path / 'ER1_0,71_Log4_04.09.2025_09.10.18.tdms'
-mat_path  = base_path / 'Up_20_ERp_0.71_PH2p_0_9_10_22.mat'
-
-
-print("PAIR:", mat_path.name, "<->", tdms_path.name)
-
-# flow_data_df         = load_tdms_data(tdms_path)
-pmt_df = load_mat_data(mat_path)
-
-ts_pmt = pmt_df['timestamps']
-d = ts_pmt.diff().dt.total_seconds().median()
-fs_pmt = 1.0 / d
-
-pmt_raw = pmt_df['PMT']
-pmt = pmt_raw - np.mean(pmt_raw)
-
-fft_stats = calculate_fft(pmt,ts_pmt,mat_path.stem, tdms_path.stem, mat_path.parent.name)
-f0 = fft_stats["f0_Hz"]
-if np.isnan(f0):
-    f0 = None
-print(f"FFT dominant ≈ {f0 if f0 is not None else float('nan'):.3f} Hz "
-    f"(fs={fft_stats['fs_Hz']:.3f} Hz, N={fft_stats['N']})")
