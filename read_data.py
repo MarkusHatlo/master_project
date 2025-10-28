@@ -403,10 +403,14 @@ def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str,
     x = np.asarray(input_signal, float)
     x = x - np.mean(x)                      # remove DC
 
-    N    = len(x)
+    number_of_windows = 4
+    N    = round(len(x)/number_of_windows)
     w    = signal.windows.hann(N, sym=False)
+    w2 = np.array([])
+    for i in range(number_of_windows):
+        w2 = np.append(w2,w)
     cg   = w.mean()                         # coherent gain for amplitude fix
-    xw   = x * w
+    xw   = x * w2
 
     Nfft = sfft.next_fast_len(N)
 
@@ -431,7 +435,7 @@ def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str,
     amp[0] /= 2         # DC shouldn't be doubled
 
     # --- Welch PSD ---
-    nperseg  = min(max(256, N // 16), N)    # ~1/16 of record, floor at 256
+    nperseg  = min(max(256, N // number_of_windows), N)    # ~1/16 of record, floor at 256
     noverlap = min(nperseg // 2, nperseg - 1)
 
     f_welch, Pxx = signal.welch(
@@ -502,12 +506,13 @@ def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str,
 
     plt.tight_layout()
 
-    picture_path = Path('pictures')
-    out_dir = picture_path / folderName
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
-    fig.savefig(out_path, dpi=300,bbox_inches='tight')
-    plt.close()
+    # picture_path = Path('pictures')
+    # out_dir = picture_path / folderName
+    # out_dir.mkdir(parents=True, exist_ok=True)
+    # out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    # fig.savefig(out_path, dpi=300,bbox_inches='tight')
+    # plt.close()
+    plt.show()
     return {"fs_Hz": float(fft_fs), "N": int(N), "f0_Hz": float(f0)}
 
 
@@ -716,7 +721,11 @@ def main(do_LBO = False, do_Freq_FFT = False):
     print(f'Unpaired files: {unpaired}')
 
 
-main(False, True)
+# main(False, True)
 
+base_path = Path(r'data\29_08_D_88mm_260mm')
+tdms = base_path / 'ER1_0,6_log4_29.08.2025_12.18.07.tdms'
+mat  = base_path / 'Up_8_ERp_0.6_PH2p_0_12_18_10.mat'
 
-
+pmt_pressure_data_df = load_mat_data(mat)
+fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
