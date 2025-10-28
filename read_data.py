@@ -384,60 +384,153 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFil
     
     return
 
-def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str, folderName: str, lowpass_cutoff: float = None):
-    # --- prep ---
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+from scipy import signal
+import numpy.fft as sfft
 
+def calculate_fft(
+    input_signal,
+    input_time,
+    matFileName: str,
+    tdmsFileName: str,
+    folderName: str,
+    lowpass_cutoff: float = None,
+    nperseg: int = None,
+    overlap: float = 0.5,
+):
+    """
+    Compute and plot:
+      1) raw (and optionally lowpass-filtered) time signal
+      2) averaged amplitude FFT using overlapping Hann-windowed segments
+      3) Welch PSD
+
+    Returns dict with sampling rate, segment length, and dominant freq.
+    """
+
+    # --- sampling rate from timestamps ---
     if hasattr(input_time, "diff"):
         d = input_time.diff().dt.total_seconds().median()
     else:
         raise ValueError("input_time must be a pandas Series of datetimes.")
     if d is None or np.isnan(d) or d <= 0:
         raise ValueError(f"Bad time step (median Δt = {d}); cannot compute sampling rate.")
-    fft_fs = 1.0 / d
+    fft_fs = 1.0 / d  # Hz
 
+    # --- basic sanity for lowpass ---
     nyq = 0.5 * fft_fs
     if lowpass_cutoff is not None:
         if not (0 < lowpass_cutoff < nyq):
             raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
 
-
+    # --- center signal (remove DC mean) ---
     x = np.asarray(input_signal, float)
-    x = x - np.mean(x)                      # remove DC
+    x = x - np.mean(x)
 
-    number_of_windows = 4
-    N    = round(len(x)/number_of_windows)
-    w    = signal.windows.hann(N, sym=False)
-    w2 = np.array([])
-    for i in range(number_of_windows):
-        w2 = np.append(w2,w)
-    cg   = w.mean()                         # coherent gain for amplitude fix
-    xw   = x * w2
+    # --- choose segment length for FFT averaging ---
+    total_N = len(x)
 
-    Nfft = sfft.next_fast_len(N)
+    if nperseg is None:
+        # heuristic:
+        # - aim ~1/4 of total length
+        # - but not below 256 samples, and not above total_N
+        guess = max(256, total_N // 4)
+        nperseg = min(guess, total_N)
 
-    # --- FFT (use the windowed data) ---
-    Xr   = sfft.rfft(xw, n=Nfft)
-    f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
+    if nperseg > total_N:
+        nperseg = total_N  # just in case
 
+    # step size from overlap
+    step = int(nperseg * (1.0 - overlap))
+    if step <= 0:
+        raise ValueError("overlap too large, step became 0 or negative")
+
+    # --- helper: averaged single-sided amplitude spectrum over segments ---
+    def segmented_fft_average_amp(x_arr, fs, seg_len, step_samples):
+        """
+        Returns freqs [Hz], avg_amp [same units as x], and also the stack of amps.
+        """
+        w = signal.windows.hann(seg_len, sym=False)
+        coherent_gain = w.mean()
+
+        seg_amps = []
+        for start in range(0, len(x_arr) - seg_len + 1, step_samples):
+            seg = x_arr[start:start + seg_len]
+
+            # apply window
+            seg_w = seg * w
+
+            # FFT this segment
+            fft_out = sfft.rfft(seg_w)
+            freqs = sfft.rfftfreq(seg_len, d=1/fs)
+
+            # amplitude spectrum scaling to get single-sided peak amplitude
+            amp = (2.0 / seg_len) * np.abs(fft_out)
+
+            # fix DC (no doubling)
+            amp[0] /= 2.0
+
+            # fix Nyquist if seg_len even (no mirror bin)
+            if seg_len % 2 == 0:
+                amp[-1] /= 2.0
+
+            # correct Hann attenuation
+            amp /= coherent_gain
+
+            seg_amps.append(amp)
+
+        if not seg_amps:
+            # fallback: just do one FFT on the full signal if seg_len is too big
+            seg_len = len(x_arr)
+            w = signal.windows.hann(seg_len, sym=False)
+            coherent_gain = w.mean()
+
+            seg_w = x_arr * w
+            fft_out = sfft.rfft(seg_w)
+            freqs = sfft.rfftfreq(seg_len, d=1/fs)
+
+            amp = (2.0 / seg_len) * np.abs(fft_out)
+            amp[0] /= 2.0
+            if seg_len % 2 == 0:
+                amp[-1] /= 2.0
+            amp /= coherent_gain
+
+            seg_amps = [amp]
+
+        seg_amps = np.vstack(seg_amps)
+        avg_amp = seg_amps.mean(axis=0)
+
+        return freqs, avg_amp, seg_amps
+
+    # --- run the averaged FFT amplitude calc ---
+    f_amp, avg_amp, _all_seg_amps = segmented_fft_average_amp(
+        x_arr=x,
+        fs=fft_fs,
+        seg_len=nperseg,
+        step_samples=step,
+    )
+
+    # --- lowpass filter path, mainly for plotting time trace ---
     filtered_signal = None
     if lowpass_cutoff is not None:
-        # Filter on the original signal (not windowed) for time-domain output
-        x_fft = sfft.rfft(x, n=Nfft)
-        x_fft[f > lowpass_cutoff] = 0
-        filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
-        
-        # Also filter the FFT display
-        Xr[f > lowpass_cutoff] = 0
-    
-    # one-sided peak amplitude scaling, corrected for window
-    amp = (2.0 / (N * cg)) * np.abs(Xr)
-    if N % 2 == 0:      # Nyquist bin has no mirror
-        amp[-1] /= 2
-    amp[0] /= 2         # DC shouldn't be doubled
+        # We'll filter by zeroing frequencies above cutoff in the FFT of the FULL signal.
+        # We do this on zero-mean x for clarity.
+        N_full = len(x)
+        Nfft_full = sfft.next_fast_len(N_full)
 
-    # --- Welch PSD ---
-    nperseg  = min(max(256, N // number_of_windows), N)    # ~1/16 of record, floor at 256
-    noverlap = min(nperseg // 2, nperseg - 1)
+        X_full = sfft.rfft(x, n=Nfft_full)
+        f_full = sfft.rfftfreq(Nfft_full, d=1/fft_fs)
+
+        X_full[f_full > lowpass_cutoff] = 0.0
+        x_filt_full = sfft.irfft(X_full, n=Nfft_full)[:N_full]
+        filtered_signal = x_filt_full
+
+    # --- Welch PSD for subplot 3 (this is standard PSD, not amplitude) ---
+    # choose Welch params consistent with segmenting idea
+    noverlap = int(nperseg * overlap)
+    if noverlap >= nperseg:
+        noverlap = nperseg - 1  # safety clamp
 
     f_welch, Pxx = signal.welch(
         x,
@@ -449,72 +542,86 @@ def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str,
         scaling='density',
         return_onesided=True
     )
-    # --- dominant frequency (ignore DC); sub-bin parabolic refine ---
-    if amp.size > 3:
-        k0 = int(np.argmax(amp[1:])) + 1  # skip DC
-        if 1 <= k0 < len(amp) - 1:
-            # parabolic interpolation on log-amplitude for a smoother peak estimate
-            y1, y2, y3 = np.log(amp[k0-1] + 1e-16), np.log(amp[k0] + 1e-16), np.log(amp[k0+1] + 1e-16)
-            denom = (2*y2 - y1 - y3)
-            delta = 0.0 if denom == 0 else 0.5*(y1 - y3)/denom  # -1..+1 bin offset
-            f0 = f[k0] + delta*(f[1] - f[0])
-            a0 = np.exp(y2 - 0.25*(y1 - y3)*delta)  # interpolated peak amplitude (optional)
-        else:
-            f0 = f[k0]
-            a0 = amp[k0]
+
+    # --- dominant frequency from the averaged amplitude spectrum ---
+    if avg_amp.size > 1:
+        k0 = int(np.argmax(avg_amp[1:])) + 1  # ignore DC
+        f0 = float(f_amp[k0])
+        a0 = float(avg_amp[k0])
     else:
-        f0, a0 = np.nan, np.nan
+        f0 = np.nan
+        a0 = np.nan
+
 
     # --- Plots ---
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
 
-    ax1.plot(input_time, x)
+    # 1) time trace
+    ax1.plot(input_time, x, label='Raw (DC removed)')
     if filtered_signal is not None:
-        ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
-        ax1.legend()
+        ax1.plot(input_time, filtered_signal, label='Lowpass', linewidth=1.5)
     ax1.set_title('PMT data')
     ax1.set_ylabel('PMT signal')
     ax1.set_xlabel('Time')
+    if filtered_signal is not None:
+        ax1.legend(fontsize=8)
+    ax1.grid(True, linestyle="--", alpha=0.3)
 
-    ax2.plot(f, amp)
-    title = 'FFT amplitude (Hann-windowed)'
-    ax2.set_xlim(0,10)
+    # 2) averaged amplitude FFT
+    ax2.plot(f_amp, avg_amp, label='Segment-averaged FFT (Hann, 50% overlap)')
+    ax2.set_xlim(0, 10)
+    title = 'Averaged FFT amplitude (Hann-windowed segments)'
     if lowpass_cutoff is not None:
-        title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
-        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
-        ax2.legend()
-        ax2.set_xlim(0,lowpass_cutoff)
+        title += f' | lowpass {lowpass_cutoff} Hz (time trace only)'
+        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Lowpass cutoff')
+        # Do not force xlim to lowpass_cutoff here, because the FFT shown is unfiltered.
+        # But if you WANT to zoom:
+        # ax2.set_xlim(0, lowpass_cutoff)
 
     if np.isfinite(f0) and np.isfinite(a0):
         ax2.plot([f0], [a0], 'o', markersize=6, label=f'Peak ~ {f0:.2f} Hz')
-        ax2.annotate(f'{f0:.2f} Hz', xy=(f0, a0), xytext=(5, 5),
-                    textcoords='offset points', fontsize=8)
-        ax2.legend(fontsize=9)
+        ax2.annotate(
+            f'{f0:.2f} Hz',
+            xy=(f0, a0),
+            xytext=(5, 5),
+            textcoords='offset points',
+            fontsize=8
+        )
 
     ax2.set_title(title)
-    ax2.set_ylabel('Amplitude [peak]')
+    ax2.set_ylabel('Amplitude [peak units]')
     ax2.set_xlabel('Frequency [Hz]')
     ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax2.legend(fontsize=8)
 
-    ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
+    # 3) Welch PSD
+    ax3.semilogy(f_welch, Pxx)
     ax3.set_title('Power spectral density (Welch)')
-    ax3.set_xlim(0,10)
+    ax3.set_xlim(0, 10)
     if lowpass_cutoff is not None:
-        ax3.set_xlim(0,lowpass_cutoff)
+        # only zoom PSD if you really want to match low freq
+        ax3.set_xlim(0, lowpass_cutoff)
     ax3.set_ylabel('PSD [units²/Hz]')
     ax3.set_xlabel('Frequency [Hz]')
     ax3.grid(True, which="both", linestyle="--", alpha=0.4)
 
     plt.tight_layout()
 
-    # picture_path = Path('pictures')
-    # out_dir = picture_path / folderName
-    # out_dir.mkdir(parents=True, exist_ok=True)
-    # out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
-    # fig.savefig(out_path, dpi=300,bbox_inches='tight')
-    # plt.close()
+    # --- save figure ---
+    picture_path = Path('pictures')
+    out_dir = picture_path / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    fig.savefig(out_path, dpi=300, bbox_inches='tight')
     plt.show()
-    return {"fs_Hz": float(fft_fs), "N": int(N), "f0_Hz": float(f0)}
+    # plt.close(fig)  # if you prefer not to display
+
+    return {
+        "fs_Hz": float(fft_fs),
+        "nperseg": int(nperseg),
+        "overlap": float(overlap),
+        "f0_Hz": float(f0),
+    }
 
 
 def load_tdms_data(tdms_path: Path):
@@ -721,16 +828,16 @@ def main(do_LBO = False, do_Freq_FFT = False):
     print(f'FFT failures: {fft_fail}')
     print(f'Unpaired files: {unpaired}')
 
-
+start = time.time()
 # main(False, True)
 
-start = time.time()
-base_path = Path(r'data\29_08_D_88mm_260mm')
-tdms = base_path / 'ER1_0,6_log4_29.08.2025_12.18.07.tdms'
-mat  = base_path / 'Up_8_ERp_0.6_PH2p_0_12_18_10.mat'
+# start = time.time()
+# base_path = Path(r'data\29_08_D_88mm_260mm')
+# tdms = base_path / 'ER1_0,6_log4_29.08.2025_12.18.07.tdms'
+# mat  = base_path / 'Up_8_ERp_0.6_PH2p_0_12_18_10.mat'
 
-pmt_pressure_data_df = load_mat_data(mat)
-fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+# pmt_pressure_data_df = load_mat_data(mat)
+# fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")
