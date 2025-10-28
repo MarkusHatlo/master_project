@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.io as sio
 import re
+import time
 
 from scipy import fft as sfft
 from scipy.signal import find_peaks, savgol_filter
@@ -723,9 +724,13 @@ def main(do_LBO = False, do_Freq_FFT = False):
 
 # main(False, True)
 
+start = time.time()
 base_path = Path(r'data\29_08_D_88mm_260mm')
 tdms = base_path / 'ER1_0,6_log4_29.08.2025_12.18.07.tdms'
 mat  = base_path / 'Up_8_ERp_0.6_PH2p_0_12_18_10.mat'
 
 pmt_pressure_data_df = load_mat_data(mat)
 fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+
+end = time.time()
+print("Elapsed:", end - start, "seconds")
