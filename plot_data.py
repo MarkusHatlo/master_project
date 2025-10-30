@@ -146,6 +146,14 @@ def plot_split_by_D(data_avg, target_D=88, show_folder_legends=False):
 
     fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
 
+    oscillations_U_88_1 = [7,8,14,20,26,8,15,39]
+    oscillations_ER_88_1 = [0.6,0.65,0.7,0.71,0.72,0.6,0.7,0.75]
+    oscillations_U_88_2 = [28,35,42,53,50,60]
+    oscillations_ER_88_2 = [0.72,0.75,0.8,0.85,0.8,0.85]
+    oscillations_U_2 = [45,53,20,32,42,51]
+    oscillations_ER_2 = [0.90,0.95,0.75,0.8,0.85,0.9]
+    oscillations_U_3 = [12,17,26,8,14]
+    oscillations_ER_3 = [0.7,0.75,0.8,0.66,0.7]
     # helper to draw one panel
     def draw_panel(ax, data, title):
         for (folder, D, H), g in data.groupby(["folder", "D_mm", "H_mm"]):
@@ -168,6 +176,13 @@ def plot_split_by_D(data_avg, target_D=88, show_folder_legends=False):
 
     draw_panel(ax_left,  data_avg[mask_target],     f"D = {target_D} mm")
     draw_panel(ax_right, data_avg[~mask_target],    "All other diameters")
+    ax_left.plot(oscillations_ER_88_1,oscillations_U_88_1,marker='*', linestyle='',color='green')
+    ax_left.plot(oscillations_ER_88_2,oscillations_U_88_2,marker='*', linestyle='',color='orange')
+    ax_right.plot(oscillations_ER_2,oscillations_U_2,marker='*', linestyle='',color='orange')
+    ax_right.plot(oscillations_ER_3,oscillations_U_3,marker='*', linestyle='',color='red')
+    # ax_right.set_xlim(0,1)
+    # ax_left.set_xlim(0,1)
+
 
     # existing height legend (colors)
     fig.legend(handles=height_handles, title="Height (color)",
@@ -223,7 +238,7 @@ def plot_freq_full():
     """
 
     # --- 1. Load frequency data from logs 4-6 ---
-    freq_df = pd.read_csv("freq_results_log456.csv")
+    freq_df = pd.read_csv("freq_results.csv")
 
     freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
 
@@ -351,7 +366,7 @@ def plot_freq_full():
 
     plt.show()
 
-def plot_freq_scatter(csv_path="freq_results_log456.csv"):
+def plot_freq_scatter(csv_path="freq_results.csv"):
     """
     Make a 3-row figure:
 
@@ -431,5 +446,6 @@ def plot_freq_scatter(csv_path="freq_results_log456.csv"):
     plt.show()
 
 
+plot_LBO()
 # plot_freq_full()
-plot_freq_scatter()
+# plot_freq_scatter()

@@ -384,12 +384,6 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFil
     
     return
 
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
-from scipy import signal
-import numpy.fft as sfft
-
 def calculate_fft(
     input_signal,
     input_time,
@@ -433,14 +427,15 @@ def calculate_fft(
 
     if nperseg is None:
         # heuristic:
-        # - aim ~1/4 of total length
+        # - aim ~1/8 of total length
         # - but not below 256 samples, and not above total_N
-        guess = max(256, total_N // 4)
+        guess = max(256, total_N // 8)
         nperseg = min(guess, total_N)
 
     if nperseg > total_N:
         nperseg = total_N  # just in case
 
+    print('nperseg',nperseg)
     # step size from overlap
     step = int(nperseg * (1.0 - overlap))
     if step <= 0:
@@ -613,8 +608,7 @@ def calculate_fft(
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
-    plt.show()
-    # plt.close(fig)  # if you prefer not to display
+    plt.close(fig)
 
     return {
         "fs_Hz": float(fft_fs),
@@ -731,9 +725,9 @@ def main(do_LBO = False, do_Freq_FFT = False):
             "time_diff" : time_difference
             })
 
-        # ------- Frequency path: logs 6 -------
-        elif do_Freq_FFT and log_no in {6}:
-            print('Frequency candidate (log 6)')
+        # ------- Frequency path: logs 4,5,6 -------
+        elif do_Freq_FFT and log_no in {4,5,6}:
+            print('Frequency candidate (log 4,5,6)')
             pmt_pressure_data_df = load_mat_data(mat)
 
             try:
@@ -763,7 +757,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
                     f0_print = float('nan')
                 else:
                     f0_print = f0
-                print(f"FFT dominant ≈ {f0_print:.3f} Hz (fs={fft_stats['fs_Hz']:.3f} Hz, N={fft_stats['N']})")
+                print(f"FFT dominant ≈ {f0_print:.3f} Hz "f"(fs={fft_stats['fs_Hz']:.3f} Hz, nperseg={fft_stats['nperseg']})")
             except ValueError as e:
                 fft_fail += 1
                 print(f"Value error: {e}; skipping.")
@@ -829,7 +823,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-# main(False, True)
+main(False, True)
 
 # start = time.time()
 # base_path = Path(r'data\29_08_D_88mm_260mm')
