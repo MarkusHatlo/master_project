@@ -424,28 +424,99 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
+    do_manual = True
     # --- Build 3×1 figure ---
     fig, (ax_u, ax_er, ax_vol) = plt.subplots(
         3, 1, figsize=(9, 10), sharex=False
     )
 
     # 1) freq vs U
-    do_scatter(ax_u, "U", "U [m/s]")
+    if do_manual:
+        #88 200,88 260,88 350,100 260,120 260        
+        ax_u.set_xlabel('U [m/s]')
+        ax_u.set_ylabel("FFT peak frequency [Hz]")
+        ax_u.grid(True, alpha=0.3)
+        manual_freq_88_200 = [0.59,0.87,1.17,1.41]
+        manual_vel_88_200 = [14,28,35,42]
+        ax_u.plot(manual_vel_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+
+        manual_freq_88_260 = [0.59,1.19,2.19,1.99,1.89]
+        manual_vel_88_260 = [8,15,39.4,49.7,59.6]
+        ax_u.plot(manual_vel_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+
+        manual_freq_88_350 = [0.72,0.62,1.63,2.34,2.21]
+        manual_vel_88_350 = [7,8,14,20,26]
+        ax_u.plot(manual_vel_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+
+        manual_freq_100_260 = [1.17,0.72,0.56,1.04,1.14]
+        manual_vel_100_260 = [14,20,22.44,32,42]
+        ax_u.plot(manual_vel_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+
+        # manual_freq_120_260 = [1.15,0.85,]
+        # manual_vel_120_260 = [7,17,26]
+        # ax_u.plot(manual_vel_120_260,manual_freq_120_260,color='orange',linestyle='',marker='o', label='D: 100 H: 260')
+
+    else:
+        do_scatter(ax_u, "U", "U [m/s]")
+
+    SuTong_freq = [0.5,1,2,4.25,7.75,9]
+    SuTong_vel = [10,20,35,60,85,110]
+    ax_u.plot(SuTong_vel,SuTong_freq,color='black',linestyle='',marker='o', label='Su Tong')
+
     ax_u.set_title("FFT peak frequency vs Speed U")
+    ax_u.legend()
+
 
     # 2) freq vs ER
-    do_scatter(ax_er, "ER", "Equivalence ratio [-]")
+    if do_manual:
+        ax_er.set_xlabel('Equivalence ratio [-]')
+        ax_er.set_ylabel("FFT peak frequency [Hz]")
+        ax_er.grid(True, alpha=0.3)
+        manual_er_88_200 = [0.7,0.72,0.75,0.8]
+        ax_er.plot(manual_er_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+
+        manual_er_88_260 = [0.6,0.7,0.75,0.8,0.85]
+        ax_er.plot(manual_er_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+
+        manual_er_88_350 = [0.6,0.65,0.70,0.71,0.72]
+        ax_er.plot(manual_er_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+
+        manual_er_100_260 = [0.7,0.75,0.73,0.79,0.84]
+        ax_er.plot(manual_er_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+    else:
+        do_scatter(ax_er, "ER", "Equivalence ratio [-]")
+
     ax_er.set_title("FFT peak frequency vs Equivalence ratio")
+    ax_er.legend()
 
     # 3) freq vs Volume
-    do_scatter(ax_vol, "Volume_mm3", "Volume [mm³]")
+    if do_manual:
+        ax_vol.set_xlabel('Volume [mm³]')
+        ax_vol.set_ylabel("FFT peak frequency [Hz]")
+        ax_vol.grid(True, alpha=0.3)
+        manual_vol_88_200 = [1.21,1.21,1.21,1.21]
+        ax_vol.plot(manual_vol_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+
+        manual_vol_88_260 = [1.58,1.58,1.58,1.58,1.58]
+        ax_vol.plot(manual_vol_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+
+        manual_vol_88_350 = [2.13,2.13,2.13,2.13,2.13]
+        ax_vol.plot(manual_vol_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+
+        manual_vol_100_260 = [2.04,2.04,2.04,2.04,2.04]
+        ax_vol.plot(manual_vol_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+    else:
+        do_scatter(ax_vol, "Volume_mm3", "Volume [mm³]")
+    
     ax_vol.set_title("FFT peak frequency vs Volume (cylindrical quartz)")
+    ax_vol.legend()
+
 
     fig.suptitle("Frequency relationships", fontsize=14)
     fig.tight_layout(rect=[0, 0.02, 1, 0.96])
     plt.show()
 
 
-plot_LBO()
+# plot_LBO()
 # plot_freq_full()
-# plot_freq_scatter()
+plot_freq_scatter()
