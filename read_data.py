@@ -429,7 +429,7 @@ def calculate_fft(
         # heuristic:
         # - aim ~1/8 of total length
         # - but not below 256 samples, and not above total_N
-        guess = max(256, total_N // 8)
+        guess = max(256, total_N // 6)
         nperseg = min(guess, total_N)
 
     if nperseg > total_N:
@@ -615,6 +615,7 @@ def calculate_fft(
         "nperseg": int(nperseg),
         "overlap": float(overlap),
         "f0_Hz": float(f0),
+        "a0_amp" : float(a0)
     }
 
 
@@ -730,29 +731,30 @@ def main(do_LBO = False, do_Freq_FFT = False):
             print('Frequency candidate (log 4,5,6)')
             pmt_pressure_data_df = load_mat_data(mat)
 
-            try:
-                print('Detecting peaks')
-                peaks = detect_pmt_peaks(pmt_pressure_data_df)
-                print('Plotting')
-                plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem, mat.parent.name)
-                print('Calculating freq')
-                stats = peak_period_frequency(peaks)
-            except ValueError:
-                freq_fail += 1
-                print("Not enough peaks to compute frequency; skipping.")
-                continue
-            except Exception as e:
-                freq_fail += 1
-                print(f"Peak/frequency computation failed: {e}")
-                continue
+            # try:
+            #     print('Detecting peaks')
+            #     peaks = detect_pmt_peaks(pmt_pressure_data_df)
+            #     print('Plotting')
+            #     plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem, mat.parent.name)
+            #     print('Calculating freq')
+            #     stats = peak_period_frequency(peaks)
+            # except ValueError:
+            #     freq_fail += 1
+            #     print("Not enough peaks to compute frequency; skipping.")
+            #     continue
+            # except Exception as e:
+            #     freq_fail += 1
+            #     print(f"Peak/frequency computation failed: {e}")
+            #     continue
 
-            print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
-                  f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
+            # print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
+            #       f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
 
             try:
                 print('Calculating FFT')
                 fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
                 f0 = fft_stats["f0_Hz"]
+                a0 = fft_stats["a0_amp"]
                 if f0 is None or (isinstance(f0, float) and np.isnan(f0)):
                     f0_print = float('nan')
                 else:
@@ -774,13 +776,14 @@ def main(do_LBO = False, do_Freq_FFT = False):
                 "mat_file": mat.name,
                 "tdms_file": tdms.name,
                 "log_no": log_no,
-                "n_peaks": stats["n_peaks"],
-                "n_intervals": stats["n_intervals"],
-                "freq_mean_Hz": stats["freq_mean_Hz"],
-                "freq_std_Hz": stats["freq_std_Hz"],
-                "freq_median_Hz": stats["freq_median_Hz"],
-                "freq_MAD_Hz": stats["freq_MAD_Hz"],
+                # "n_peaks": stats["n_peaks"],
+                # "n_intervals": stats["n_intervals"],
+                # "freq_mean_Hz": stats["freq_mean_Hz"],
+                # "freq_std_Hz": stats["freq_std_Hz"],
+                # "freq_median_Hz": stats["freq_median_Hz"],
+                # "freq_MAD_Hz": stats["freq_MAD_Hz"],
                 "fft_f0_Hz": f0,
+                "fft_a0_amp": a0,
             })
 
 
@@ -818,7 +821,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
 
 
     print(f'No-zero-cross (LBO) skipped: {no_zero_cross}')
-    print(f'Frequency failures (not enough peaks): {freq_fail}')
+    # print(f'Frequency failures (not enough peaks): {freq_fail}')
     print(f'FFT failures: {fft_fail}')
     print(f'Unpaired files: {unpaired}')
 
