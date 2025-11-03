@@ -393,6 +393,7 @@ def calculate_fft(
     lowpass_cutoff: float = None,
     nperseg: int = None,
     overlap: float = 0.5,
+    stop_after_s: float | None = None
 ):
     """
     Compute and plot:
@@ -418,8 +419,23 @@ def calculate_fft(
         if not (0 < lowpass_cutoff < nyq):
             raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
 
-    # --- center signal (remove DC mean) ---
     x = np.asarray(input_signal, float)
+    t = np.asarray(input_time)
+
+    # --- manual hard stop by elapsed time (optional) ---
+    if stop_after_s is not None:
+        # robust elapsed seconds from the time vector
+        if hasattr(input_time, "iloc"):  # pandas Series of datetimes
+            elapsed_s = (input_time - input_time.iloc[0]).dt.total_seconds().to_numpy()
+        else:  # numpy datetime64
+            elapsed_s = ((t - t[0]).astype('timedelta64[ns]').astype('int64')) / 1e9
+
+        end = int(np.searchsorted(elapsed_s, stop_after_s, side="right"))
+        end = max(0, min(end, len(x)))
+        x, t = x[:end], t[:end]
+
+
+    # --- center signal (remove DC mean) ---
     x = x - np.mean(x)
 
     # --- choose segment length for FFT averaging ---
@@ -552,9 +568,9 @@ def calculate_fft(
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
 
     # 1) time trace
-    ax1.plot(input_time, x, label='Raw (DC removed)')
+    ax1.plot(t, x, label='Raw (DC removed)')
     if filtered_signal is not None:
-        ax1.plot(input_time, filtered_signal, label='Lowpass', linewidth=1.5)
+        ax1.plot(t, filtered_signal, label='Lowpass', linewidth=1.5)
     ax1.set_title('PMT data')
     ax1.set_ylabel('PMT signal')
     ax1.set_xlabel('Time')
@@ -826,15 +842,25 @@ def main(do_LBO = False, do_Freq_FFT = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(False, True)
+# main(False, True)
 
-# start = time.time()
-# base_path = Path(r'data\29_08_D_88mm_260mm')
-# tdms = base_path / 'ER1_0,6_log4_29.08.2025_12.18.07.tdms'
-# mat  = base_path / 'Up_8_ERp_0.6_PH2p_0_12_18_10.mat'
+# base_path = Path(r'data\01_09_D_120mm_260mm')
+# # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
+# # mat  = base_path / 'Up_45_ERp_0.9_PH2p_0_11_31_27.mat'
+
+# tdms = base_path / 'ER1_0.95_log6_01.09.2025_11.53.29.tdms'
+# mat  = base_path / 'Up_53_ERp_0.95_PH2p_0_11_53_32.mat'
 
 # pmt_pressure_data_df = load_mat_data(mat)
-# fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+# fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
+
+base_path = Path(r'data\29_08_D_88mm_260mm')
+tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
+mat  = base_path / 'LBO_Sweep_2_12_41_26.mat'
+
+flow_data_df = load_tdms_data(tdms)
+pmt_pressure_data_df = load_mat_data(mat)
+calculate_U_ER(pmt_pressure_data_df,flow_data_df,True)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")

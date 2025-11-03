@@ -238,7 +238,7 @@ def plot_freq_full():
     """
 
     # --- 1. Load frequency data from logs 4-6 ---
-    freq_df = pd.read_csv("freq_results.csv")
+    freq_df = pd.read_csv("freq_results_8_windows_with_peaks.csv")
 
     freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
 
@@ -516,7 +516,80 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
     fig.tight_layout(rect=[0, 0.02, 1, 0.96])
     plt.show()
 
+def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
+    """
+    Two-panel figure for logs 4–6 style CSVs:
+      (1) fft_f0_Hz vs ER
+      (2) fft_a0_amp vs ER
+
+    Lines: one per folder, color = H_mm, marker = D_mm.
+    """
+    # --- Load ---
+    df = pd.read_csv(csv_path)
+    required = {"folder", "mat_file", "tdms_file", "log_no", "fft_f0_Hz", "fft_a0_amp"}
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"CSV missing required columns: {missing}. Found: {list(df.columns)}")
+
+    # --- Parse ER, D, H ---
+    df["ER_guess"] = df["tdms_file"].astype(str).apply(extract_ER_from_name)
+    dims = df["folder"].astype(str).apply(extract_dims)
+    df["D_mm"] = [d for d, h in dims]
+    df["H_mm"] = [h for d, h in dims]
+
+    # drop rows without ER (nothing to plot on x)
+    df = df.dropna(subset=["ER_guess"])
+
+    # --- Average repeats at same (folder, D, H, ER) ---
+    avg = (df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+             .agg(fft_f0_Hz=("fft_f0_Hz", "mean"),
+                  fft_a0_amp=("fft_a0_amp", "mean")))
+
+    if avg.empty:
+        raise ValueError("No rows left after parsing ER. Check file names for ER patterns (e.g. 'ERp_0.75').")
+
+    # --- Styling helpers ---
+    color_for_height, height_handles = make_height_colors(avg["H_mm"])
+    diameters_present = avg["D_mm"].dropna().astype(int).sort_values().unique()
+    marker_handles = [Line2D([0],[0], marker=marker_for_diameter_local(d),
+                             linestyle="", color="0.2", markersize=8, label=f"D = {d} mm")
+                      for d in diameters_present]
+    if avg["D_mm"].isna().any():
+        marker_handles.append(Line2D([0],[0], marker="o", linestyle="", color="0.2",
+                                     markersize=8, label="D unknown"))
+
+    # --- Figure ---
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(10, 8), sharex=True, constrained_layout=False)
+
+    def draw_panel(ax, ycol, ylabel, title):
+        for (folder, D, H), g in avg.groupby(["folder", "D_mm", "H_mm"]):
+            g = g.sort_values("ER_guess")
+            label = (f"D={int(D)}mm, H={int(H)}mm") if pd.notna(D) and pd.notna(H) else folder
+            ax.plot(g["ER_guess"], g[ycol], "-",
+                    marker=marker_for_diameter_local(D), markersize=5,
+                    color=color_for_height(H), label=label)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+
+    draw_panel(ax_top, "fft_f0_Hz",  "f₀ (FFT peak) [Hz]",  "Dominant frequency vs ER")
+    draw_panel(ax_bot, "fft_a0_amp", "a₀ amplitude [a.u.]", "Peak amplitude vs ER")
+    ax_bot.set_xlabel("Equivalence ratio [-]")
+
+    # Legends
+    leg1 = fig.legend(handles=height_handles, title="Height (color)", fontsize=8,
+                      loc="lower left", bbox_to_anchor=(0.08, 0.0))
+    fig.legend(handles=marker_handles, title="Diameter (marker)", fontsize=8,
+               loc="lower right", bbox_to_anchor=(0.92, 0.0))
+    _ = leg1
+
+    fig.suptitle("Instability metrics vs Equivalence ratio")
+    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.95])
+    plt.show()
+
+
 
 # plot_LBO()
 # plot_freq_full()
 plot_freq_scatter()
+# plot_freq_f0_and_a0()
