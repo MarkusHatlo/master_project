@@ -575,7 +575,8 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
     draw_panel(ax_top, "fft_f0_Hz",  "f₀ (FFT peak) [Hz]",  "Dominant frequency vs ER")
     draw_panel(ax_bot, "fft_a0_amp", "a₀ amplitude [a.u.]", "Peak amplitude vs ER")
     ax_bot.set_xlabel("Equivalence ratio [-]")
-
+    ax_bot.axhline(y=0.07,color='red')
+    
     # Legends
     leg1 = fig.legend(handles=height_handles, title="Height (color)", fontsize=8,
                       loc="lower left", bbox_to_anchor=(0.08, 0.0))
@@ -591,5 +592,5 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 # plot_LBO()
 # plot_freq_full()
-plot_freq_scatter()
-# plot_freq_f0_and_a0()
+# plot_freq_scatter()
+plot_freq_f0_and_a0()
