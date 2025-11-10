@@ -146,14 +146,28 @@ def plot_split_by_D(data_avg, target_D=88, show_folder_legends=False):
 
     fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
 
+    # oscillations_U_88_1 = [7,8,14,20,26,8,15,39]
+    # oscillations_ER_88_1 = [0.6,0.65,0.7,0.71,0.72,0.6,0.7,0.75]
+    # oscillations_U_88_2 = [28,35,42,53,50,60]
+    # oscillations_ER_88_2 = [0.72,0.75,0.8,0.85,0.8,0.85]
+    # oscillations_U_2 = [45,53,20,32,42,51]
+    # oscillations_ER_2 = [0.90,0.95,0.75,0.8,0.85,0.9]
+    # oscillations_U_3 = [12,17,26,8,14]
+    # oscillations_ER_3 = [0.7,0.75,0.8,0.66,0.7]
+
+    #Strict
     oscillations_U_88_1 = [7,8,14,20,26,8,15,39]
     oscillations_ER_88_1 = [0.6,0.65,0.7,0.71,0.72,0.6,0.7,0.75]
-    oscillations_U_88_2 = [28,35,42,53,50,60]
-    oscillations_ER_88_2 = [0.72,0.75,0.8,0.85,0.8,0.85]
-    oscillations_U_2 = [45,53,20,32,42,51]
-    oscillations_ER_2 = [0.90,0.95,0.75,0.8,0.85,0.9]
-    oscillations_U_3 = [12,17,26,8,14]
-    oscillations_ER_3 = [0.7,0.75,0.8,0.66,0.7]
+    oscillations_U_88_2 = [14,42,50]
+    oscillations_ER_88_2 = [0.7,0.8,0.8]
+    oscillations_U_88_3 = [60,28,35,53]
+    oscillations_ER_88_3 = [0.85,0.72,0.75,0.85]
+    
+    oscillations_U_2 = [45,53,32,42]
+    oscillations_ER_2 = [0.90,0.95,0.8,0.85]
+    oscillations_U_3 = [12,17,26,8,14,20,51]
+    oscillations_ER_3 = [0.7,0.75,0.8,0.66,0.7,0.75,0.9]
+
     # helper to draw one panel
     def draw_panel(ax, data, title):
         for (folder, D, H), g in data.groupby(["folder", "D_mm", "H_mm"]):
@@ -178,6 +192,7 @@ def plot_split_by_D(data_avg, target_D=88, show_folder_legends=False):
     draw_panel(ax_right, data_avg[~mask_target],    "All other diameters")
     ax_left.plot(oscillations_ER_88_1,oscillations_U_88_1,marker='*', linestyle='',color='green')
     ax_left.plot(oscillations_ER_88_2,oscillations_U_88_2,marker='*', linestyle='',color='orange')
+    ax_left.plot(oscillations_ER_88_3,oscillations_U_88_3,marker='*', linestyle='',color='red')
     ax_right.plot(oscillations_ER_2,oscillations_U_2,marker='*', linestyle='',color='orange')
     ax_right.plot(oscillations_ER_3,oscillations_U_3,marker='*', linestyle='',color='red')
     # ax_right.set_xlim(0,1)
@@ -426,8 +441,8 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
 
     do_manual = True
     # --- Build 3×1 figure ---
-    fig, (ax_u, ax_er, ax_vol) = plt.subplots(
-        3, 1, figsize=(9, 10), sharex=False
+    fig, (ax_u) = plt.subplots(
+        1, 1, figsize=(9, 10), sharex=False
     )
 
     # 1) freq vs U
@@ -467,53 +482,53 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
     ax_u.legend()
 
 
-    # 2) freq vs ER
-    if do_manual:
-        ax_er.set_xlabel('Equivalence ratio [-]')
-        ax_er.set_ylabel("FFT peak frequency [Hz]")
-        ax_er.grid(True, alpha=0.3)
-        manual_er_88_200 = [0.7,0.72,0.75,0.8]
-        ax_er.plot(manual_er_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+    # # 2) freq vs ER
+    # if do_manual:
+    #     ax_er.set_xlabel('Equivalence ratio [-]')
+    #     ax_er.set_ylabel("FFT peak frequency [Hz]")
+    #     ax_er.grid(True, alpha=0.3)
+    #     manual_er_88_200 = [0.7,0.72,0.75,0.8]
+    #     ax_er.plot(manual_er_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
 
-        manual_er_88_260 = [0.6,0.7,0.75,0.8,0.85]
-        ax_er.plot(manual_er_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+    #     manual_er_88_260 = [0.6,0.7,0.75,0.8,0.85]
+    #     ax_er.plot(manual_er_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
 
-        manual_er_88_350 = [0.6,0.65,0.70,0.71,0.72]
-        ax_er.plot(manual_er_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+    #     manual_er_88_350 = [0.6,0.65,0.70,0.71,0.72]
+    #     ax_er.plot(manual_er_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
 
-        manual_er_100_260 = [0.7,0.75,0.73,0.79,0.84]
-        ax_er.plot(manual_er_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
-    else:
-        do_scatter(ax_er, "ER", "Equivalence ratio [-]")
+    #     manual_er_100_260 = [0.7,0.75,0.73,0.79,0.84]
+    #     ax_er.plot(manual_er_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+    # else:
+    #     do_scatter(ax_er, "ER", "Equivalence ratio [-]")
 
-    ax_er.set_title("FFT peak frequency vs Equivalence ratio")
-    ax_er.legend()
+    # ax_er.set_title("FFT peak frequency vs Equivalence ratio")
+    # ax_er.legend()
 
-    # 3) freq vs Volume
-    if do_manual:
-        ax_vol.set_xlabel('Volume [mm³]')
-        ax_vol.set_ylabel("FFT peak frequency [Hz]")
-        ax_vol.grid(True, alpha=0.3)
-        manual_vol_88_200 = [1.21,1.21,1.21,1.21]
-        ax_vol.plot(manual_vol_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+    # # 3) freq vs Volume
+    # if do_manual:
+    #     ax_vol.set_xlabel('Volume [mm³]')
+    #     ax_vol.set_ylabel("FFT peak frequency [Hz]")
+    #     ax_vol.grid(True, alpha=0.3)
+    #     manual_vol_88_200 = [1.21,1.21,1.21,1.21]
+    #     ax_vol.plot(manual_vol_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
 
-        manual_vol_88_260 = [1.58,1.58,1.58,1.58,1.58]
-        ax_vol.plot(manual_vol_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+    #     manual_vol_88_260 = [1.58,1.58,1.58,1.58,1.58]
+    #     ax_vol.plot(manual_vol_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
 
-        manual_vol_88_350 = [2.13,2.13,2.13,2.13,2.13]
-        ax_vol.plot(manual_vol_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+    #     manual_vol_88_350 = [2.13,2.13,2.13,2.13,2.13]
+    #     ax_vol.plot(manual_vol_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
 
-        manual_vol_100_260 = [2.04,2.04,2.04,2.04,2.04]
-        ax_vol.plot(manual_vol_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
-    else:
-        do_scatter(ax_vol, "Volume_mm3", "Volume [mm³]")
+    #     manual_vol_100_260 = [2.04,2.04,2.04,2.04,2.04]
+    #     ax_vol.plot(manual_vol_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+    # else:
+    #     do_scatter(ax_vol, "Volume_mm3", "Volume [mm³]")
     
-    ax_vol.set_title("FFT peak frequency vs Volume (cylindrical quartz)")
-    ax_vol.legend()
+    # ax_vol.set_title("FFT peak frequency vs Volume (cylindrical quartz)")
+    # ax_vol.legend()
 
 
-    fig.suptitle("Frequency relationships", fontsize=14)
-    fig.tight_layout(rect=[0, 0.02, 1, 0.96])
+    # fig.suptitle("Frequency relationships", fontsize=14)
+    # fig.tight_layout(rect=[0, 0.02, 1, 0.96])
     plt.show()
 
 def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
@@ -576,7 +591,7 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
     draw_panel(ax_bot, "fft_a0_amp", "a₀ amplitude [a.u.]", "Peak amplitude vs ER")
     ax_bot.set_xlabel("Equivalence ratio [-]")
     ax_bot.axhline(y=0.07,color='red')
-    
+
     # Legends
     leg1 = fig.legend(handles=height_handles, title="Height (color)", fontsize=8,
                       loc="lower left", bbox_to_anchor=(0.08, 0.0))
@@ -592,5 +607,6 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 # plot_LBO()
 # plot_freq_full()
-# plot_freq_scatter()
-plot_freq_f0_and_a0()
+plot_freq_scatter()
+# Add the counted peaks
+# plot_freq_f0_and_a0()
