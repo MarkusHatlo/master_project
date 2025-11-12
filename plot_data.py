@@ -380,42 +380,71 @@ def plot_freq_full():
 
     plt.show()
 
-def plot_freq_mean_vs_f0():
+def load_or_make_avg_freq(
+    src_csv: str = "freq_results_8_windows_with_peaks.csv",
+    avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
+    force_recompute: bool = False,
+) -> pd.DataFrame:
     """
-    Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x).
-    One series per (folder, D_mm, H_mm), colored by H_mm, marker by D_mm.
-    Includes a y = x reference line.
+    Return a tidy dataframe averaged over (folder, D_mm, H_mm, ER_guess).
+    If avg_csv exists and force_recompute=False, load it; else compute and save.
     """
+    avg_path = Path(avg_csv)
+    if avg_path.exists() and not force_recompute:
+        return pd.read_csv(avg_path)
 
-    # --- 1) Load + basic parsing ---
-    freq_df = pd.read_csv("freq_results_8_windows_with_peaks.csv")
-    freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
+    # Compute fresh
+    df = pd.read_csv(src_csv)
 
-    # Dimensions from folder name
-    dims = freq_df["folder"].apply(extract_dims)
-    freq_df["D_mm"] = [d for d, h in dims]
-    freq_df["H_mm"] = [h for d, h in dims]
+    # Expect these helpers to exist in your codebase
+    df["ER_guess"] = df["tdms_file"].apply(extract_ER_from_name)
 
-    # --- 2) Average repeated runs at same (folder, D, H, ER) ---
+    dims = df["folder"].apply(extract_dims)  # returns (D_mm, H_mm)
+    df["D_mm"] = [d for d, h in dims]
+    df["H_mm"] = [h for d, h in dims]
+
+    required_cols = {"folder","D_mm","H_mm","ER_guess","fft_f0_Hz","freq_mean_Hz"}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns in source CSV: {missing}")
+
     avg_freq = (
-        freq_df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
-        .agg(
-            fft_f0_Hz    = ("fft_f0_Hz", "mean"),
-            freq_mean_Hz = ("freq_mean_Hz", "mean")
-        )
+        df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+          .agg(
+              fft_f0_Hz    = ("fft_f0_Hz", "mean"),
+              freq_mean_Hz = ("freq_mean_Hz", "mean"),
+          )
+          .sort_values(["folder","D_mm","H_mm","ER_guess"])
+          .reset_index(drop=True)
     )
+    avg_freq["freq_diff_Hz"] = avg_freq["fft_f0_Hz"] - avg_freq["freq_mean_Hz"]
 
-    # Early exit if nothing to plot
+    # Save cache for next time
+    avg_freq.to_csv(avg_path, index=False)
+    return avg_freq
+
+def plot_freq_mean_vs_f0(
+    avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
+    recompute: bool = False,
+    src_csv: str = "freq_results_8_windows_with_peaks.csv",
+):
+    """
+    Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x),
+    using pre-averaged data if available.
+    - Set recompute=True to rebuild avg CSV from src_csv.
+    """
+    if recompute or not Path(avg_csv).exists():
+        avg_freq = load_or_make_avg_freq(src_csv=src_csv, avg_csv=avg_csv, force_recompute=recompute)
+    else:
+        avg_freq = pd.read_csv(avg_csv)
+
     if avg_freq.empty:
-        print("No data to plot after grouping.")
+        print("No averaged data to plot.")
         return
 
-    # --- 3) Styling helpers ---
     color_for_height, height_handles = make_height_colors(avg_freq["H_mm"])
 
-    diameters_present = (
-        avg_freq["D_mm"].dropna().astype(int).sort_values().unique()
-    )
+    diameters_present = avg_freq["D_mm"].dropna().astype(int).sort_values().unique()
     marker_handles = []
     for dval in diameters_present:
         mk = marker_for_diameter_local(dval)
@@ -429,14 +458,11 @@ def plot_freq_mean_vs_f0():
                    markersize=8, label="D unknown")
         )
 
-    # --- 4) Figure ---
     fig, ax = plt.subplots(figsize=(8, 7))
 
-    # One series per geometry/folder; points connected in ER order
+    # One series per (folder, D, H); connect points by ER for visual continuity
     for (folder, D, H), g in avg_freq.groupby(["folder", "D_mm", "H_mm"]):
         g = g.sort_values("ER_guess")
-
-        # label for hover/debug; legend handled separately
         label = f"{folder}" if (pd.isna(D) or pd.isna(H)) else f"D={int(D)}mm, H={int(H)}mm"
 
         ax.plot(
@@ -445,30 +471,29 @@ def plot_freq_mean_vs_f0():
             "-o",
             marker=marker_for_diameter_local(D),
             markersize=5,
-            linestyle = "",
-            # linewidth=1.0,
+            linewidth=1.0,
             color=color_for_height(H),
             label=label
         )
 
-    # Identity line (y = x)
-    xvals = avg_freq["fft_f0_Hz"].values
-    yvals = avg_freq["freq_mean_Hz"].values
-    x_min = np.nanmin([xvals.min(), yvals.min()])
-    x_max = np.nanmax([xvals.max(), yvals.max()])
-    if np.isfinite(x_min) and np.isfinite(x_max):
-        pad = 0.02 * (x_max - x_min if x_max > x_min else 1.0)
-        lo, hi = x_min - pad, x_max + pad
-        ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1.0, color="0.5")
+    # y = x reference
+    xvals = avg_freq["fft_f0_Hz"].to_numpy()
+    yvals = avg_freq["freq_mean_Hz"].to_numpy()
+    lo = np.nanmin([xvals.min(), yvals.min()])
+    hi = np.nanmax([xvals.max(), yvals.max()])
+    if np.isfinite(lo) and np.isfinite(hi):
+        pad = 0.02 * (hi - lo if hi > lo else 1.0)
+        lo, hi = lo - pad, hi + pad
+        ax.plot([lo, hi], [lo, hi], "--", linewidth=1.0, color="0.5")
         ax.set_xlim(lo, hi)
         ax.set_ylim(lo, hi)
 
     ax.set_xlabel("fft_f0_Hz [Hz]")
     ax.set_ylabel("freq_mean_Hz [Hz]")
-    ax.set_title("freq_mean_Hz vs fft_f0_Hz")
+    ax.set_title("freq_mean_Hz vs fft_f0_Hz (averaged)")
     ax.grid(True, alpha=0.3)
 
-    # --- Legends (height colors + diameter markers)
+    # Legends
     leg1 = fig.legend(
         handles=height_handles,
         title="Height (color)",
@@ -483,11 +508,10 @@ def plot_freq_mean_vs_f0():
         loc="lower right",
         bbox_to_anchor=(0.95, 0.0)
     )
-    _ = leg1  # keep reference
+    _ = leg1
 
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
     plt.show()
-
 
 def plot_freq_scatter(csv_path="freq_results.csv"):
     """
@@ -718,4 +742,4 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 # plot_freq_scatter()
 # Add the counted peaks
 # plot_freq_f0_and_a0()
-plot_freq_mean_vs_f0()
+plot_freq_mean_vs_f0(recompute=True)

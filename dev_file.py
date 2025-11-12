@@ -474,146 +474,256 @@ from collections import defaultdict
 # print(f"FFT dominant ≈ {f0 if f0 is not None else float('nan'):.3f} Hz "
 #     f"(fs={fft_stats['fs_Hz']:.3f} Hz, N={fft_stats['N']})")
 
-x = 1000000
-N    = round(x/16)
-w    = signal.windows.hann(N, sym=False)
-w2 = np.array([])
-for i in range(16):
-    print('idx: ',i)
-    w2 = np.append(w2,w)
-    print(w2)
-    print(len(w2))
+# x = 1000000
+# N    = round(x/16)
+# w    = signal.windows.hann(N, sym=False)
+# w2 = np.array([])
+# for i in range(16):
+#     print('idx: ',i)
+#     w2 = np.append(w2,w)
+#     print(w2)
+#     print(len(w2))
 
-#-------------------------------------------------------------------------------------
-# Kode lagt til på gaming pc, gammel versjon av coden
+# #-------------------------------------------------------------------------------------
+# # Kode lagt til på gaming pc, gammel versjon av coden
 
-def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str, folderName: str, lowpass_cutoff: float = None):
-    # --- prep ---
+# def calculate_fft(input_signal, input_time, matFileName: str, tdmsFileName: str, folderName: str, lowpass_cutoff: float = None):
+#     # --- prep ---
 
-    if hasattr(input_time, "diff"):
-        d = input_time.diff().dt.total_seconds().median()
-    else:
-        raise ValueError("input_time must be a pandas Series of datetimes.")
-    if d is None or np.isnan(d) or d <= 0:
-        raise ValueError(f"Bad time step (median Δt = {d}); cannot compute sampling rate.")
-    fft_fs = 1.0 / d
+#     if hasattr(input_time, "diff"):
+#         d = input_time.diff().dt.total_seconds().median()
+#     else:
+#         raise ValueError("input_time must be a pandas Series of datetimes.")
+#     if d is None or np.isnan(d) or d <= 0:
+#         raise ValueError(f"Bad time step (median Δt = {d}); cannot compute sampling rate.")
+#     fft_fs = 1.0 / d
 
-    nyq = 0.5 * fft_fs
-    if lowpass_cutoff is not None:
-        if not (0 < lowpass_cutoff < nyq):
-            raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
+#     nyq = 0.5 * fft_fs
+#     if lowpass_cutoff is not None:
+#         if not (0 < lowpass_cutoff < nyq):
+#             raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
 
 
-    x = np.asarray(input_signal, float)
-    x = x - np.mean(x)                      # remove DC
+#     x = np.asarray(input_signal, float)
+#     x = x - np.mean(x)                      # remove DC
 
-    number_of_windows = 4
-    N    = round(len(x)/number_of_windows)
-    w    = signal.windows.hann(N, sym=False)
-    w2 = np.array([])
-    for i in range(number_of_windows):
-        w2 = np.append(w2,w)
-    cg   = w.mean()                         # coherent gain for amplitude fix
-    xw   = x * w2
+#     number_of_windows = 4
+#     N    = round(len(x)/number_of_windows)
+#     w    = signal.windows.hann(N, sym=False)
+#     w2 = np.array([])
+#     for i in range(number_of_windows):
+#         w2 = np.append(w2,w)
+#     cg   = w.mean()                         # coherent gain for amplitude fix
+#     xw   = x * w2
 
-    Nfft = sfft.next_fast_len(N)
+#     Nfft = sfft.next_fast_len(N)
 
-    # --- FFT (use the windowed data) ---
-    Xr   = sfft.rfft(xw, n=Nfft)
-    f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
+#     # --- FFT (use the windowed data) ---
+#     Xr   = sfft.rfft(xw, n=Nfft)
+#     f    = sfft.rfftfreq(Nfft, d=1/fft_fs)
 
-    filtered_signal = None
-    if lowpass_cutoff is not None:
-        # Filter on the original signal (not windowed) for time-domain output
-        x_fft = sfft.rfft(x, n=Nfft)
-        x_fft[f > lowpass_cutoff] = 0
-        filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
+#     filtered_signal = None
+#     if lowpass_cutoff is not None:
+#         # Filter on the original signal (not windowed) for time-domain output
+#         x_fft = sfft.rfft(x, n=Nfft)
+#         x_fft[f > lowpass_cutoff] = 0
+#         filtered_signal = sfft.irfft(x_fft, n=Nfft)[:N]  # Trim to original length
         
-        # Also filter the FFT display
-        Xr[f > lowpass_cutoff] = 0
+#         # Also filter the FFT display
+#         Xr[f > lowpass_cutoff] = 0
     
-    # one-sided peak amplitude scaling, corrected for window
-    amp = (2.0 / (N * cg)) * np.abs(Xr)
-    if N % 2 == 0:      # Nyquist bin has no mirror
-        amp[-1] /= 2
-    amp[0] /= 2         # DC shouldn't be doubled
+#     # one-sided peak amplitude scaling, corrected for window
+#     amp = (2.0 / (N * cg)) * np.abs(Xr)
+#     if N % 2 == 0:      # Nyquist bin has no mirror
+#         amp[-1] /= 2
+#     amp[0] /= 2         # DC shouldn't be doubled
 
-    # --- Welch PSD ---
-    nperseg  = min(max(256, N // number_of_windows), N)    # ~1/16 of record, floor at 256
-    noverlap = min(nperseg // 2, nperseg - 1)
+#     # --- Welch PSD ---
+#     nperseg  = min(max(256, N // number_of_windows), N)    # ~1/16 of record, floor at 256
+#     noverlap = min(nperseg // 2, nperseg - 1)
 
-    f_welch, Pxx = signal.welch(
-        x,
-        fs=fft_fs,
-        window='hann',
-        nperseg=nperseg,
-        noverlap=noverlap,
-        detrend='constant',
-        scaling='density',
-        return_onesided=True
+#     f_welch, Pxx = signal.welch(
+#         x,
+#         fs=fft_fs,
+#         window='hann',
+#         nperseg=nperseg,
+#         noverlap=noverlap,
+#         detrend='constant',
+#         scaling='density',
+#         return_onesided=True
+#     )
+#     # --- dominant frequency (ignore DC); sub-bin parabolic refine ---
+#     if amp.size > 3:
+#         k0 = int(np.argmax(amp[1:])) + 1  # skip DC
+#         if 1 <= k0 < len(amp) - 1:
+#             # parabolic interpolation on log-amplitude for a smoother peak estimate
+#             y1, y2, y3 = np.log(amp[k0-1] + 1e-16), np.log(amp[k0] + 1e-16), np.log(amp[k0+1] + 1e-16)
+#             denom = (2*y2 - y1 - y3)
+#             delta = 0.0 if denom == 0 else 0.5*(y1 - y3)/denom  # -1..+1 bin offset
+#             f0 = f[k0] + delta*(f[1] - f[0])
+#             a0 = np.exp(y2 - 0.25*(y1 - y3)*delta)  # interpolated peak amplitude (optional)
+#         else:
+#             f0 = f[k0]
+#             a0 = amp[k0]
+#     else:
+#         f0, a0 = np.nan, np.nan
+
+#     # --- Plots ---
+#     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
+
+#     ax1.plot(input_time, x)
+#     if filtered_signal is not None:
+#         ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
+#         ax1.legend()
+#     ax1.set_title('PMT data')
+#     ax1.set_ylabel('PMT signal')
+#     ax1.set_xlabel('Time')
+
+#     ax2.plot(f, amp)
+#     title = 'FFT amplitude (Hann-windowed)'
+#     ax2.set_xlim(0,10)
+#     if lowpass_cutoff is not None:
+#         title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
+#         ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
+#         ax2.legend()
+#         ax2.set_xlim(0,lowpass_cutoff)
+
+#     if np.isfinite(f0) and np.isfinite(a0):
+#         ax2.plot([f0], [a0], 'o', markersize=6, label=f'Peak ~ {f0:.2f} Hz')
+#         ax2.annotate(f'{f0:.2f} Hz', xy=(f0, a0), xytext=(5, 5),
+#                     textcoords='offset points', fontsize=8)
+#         ax2.legend(fontsize=9)
+
+#     ax2.set_title(title)
+#     ax2.set_ylabel('Amplitude [peak]')
+#     ax2.set_xlabel('Frequency [Hz]')
+#     ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+
+#     ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
+#     ax3.set_title('Power spectral density (Welch)')
+#     ax3.set_xlim(0,10)
+#     if lowpass_cutoff is not None:
+#         ax3.set_xlim(0,lowpass_cutoff)
+#     ax3.set_ylabel('PSD [units²/Hz]')
+#     ax3.set_xlabel('Frequency [Hz]')
+#     ax3.grid(True, which="both", linestyle="--", alpha=0.4)
+
+#     plt.tight_layout()
+
+#     picture_path = Path('pictures')
+#     out_dir = picture_path / folderName
+#     out_dir.mkdir(parents=True, exist_ok=True)
+#     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+#     fig.savefig(out_path, dpi=300,bbox_inches='tight')
+#     plt.close()
+#     return {"fs_Hz": float(fft_fs), "N": int(N), "f0_Hz": float(f0)}
+
+#Gammel versjon av func, før csv
+#-------------------------------------------------------------------------------------------------
+def plot_freq_mean_vs_f0():
+    """
+    Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x).
+    One series per (folder, D_mm, H_mm), colored by H_mm, marker by D_mm.
+    Includes a y = x reference line.
+    """
+
+    # --- 1) Load + basic parsing ---
+    freq_df = pd.read_csv("freq_results_8_windows_with_peaks.csv")
+    freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
+
+    # Dimensions from folder name
+    dims = freq_df["folder"].apply(extract_dims)
+    freq_df["D_mm"] = [d for d, h in dims]
+    freq_df["H_mm"] = [h for d, h in dims]
+
+    # --- 2) Average repeated runs at same (folder, D, H, ER) ---
+    avg_freq = (
+        freq_df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+        .agg(
+            fft_f0_Hz    = ("fft_f0_Hz", "mean"),
+            freq_mean_Hz = ("freq_mean_Hz", "mean")
+        )
     )
-    # --- dominant frequency (ignore DC); sub-bin parabolic refine ---
-    if amp.size > 3:
-        k0 = int(np.argmax(amp[1:])) + 1  # skip DC
-        if 1 <= k0 < len(amp) - 1:
-            # parabolic interpolation on log-amplitude for a smoother peak estimate
-            y1, y2, y3 = np.log(amp[k0-1] + 1e-16), np.log(amp[k0] + 1e-16), np.log(amp[k0+1] + 1e-16)
-            denom = (2*y2 - y1 - y3)
-            delta = 0.0 if denom == 0 else 0.5*(y1 - y3)/denom  # -1..+1 bin offset
-            f0 = f[k0] + delta*(f[1] - f[0])
-            a0 = np.exp(y2 - 0.25*(y1 - y3)*delta)  # interpolated peak amplitude (optional)
-        else:
-            f0 = f[k0]
-            a0 = amp[k0]
-    else:
-        f0, a0 = np.nan, np.nan
 
-    # --- Plots ---
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 6), sharex=False)
+    # Early exit if nothing to plot
+    if avg_freq.empty:
+        print("No data to plot after grouping.")
+        return
 
-    ax1.plot(input_time, x)
-    if filtered_signal is not None:
-        ax1.plot(input_time, filtered_signal, label='Filtered', linewidth=1.5)
-        ax1.legend()
-    ax1.set_title('PMT data')
-    ax1.set_ylabel('PMT signal')
-    ax1.set_xlabel('Time')
+    # --- 3) Styling helpers ---
+    color_for_height, height_handles = make_height_colors(avg_freq["H_mm"])
 
-    ax2.plot(f, amp)
-    title = 'FFT amplitude (Hann-windowed)'
-    ax2.set_xlim(0,10)
-    if lowpass_cutoff is not None:
-        title += f' - Lowpass filtered at {lowpass_cutoff} Hz'
-        ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Cutoff')
-        ax2.legend()
-        ax2.set_xlim(0,lowpass_cutoff)
+    diameters_present = (
+        avg_freq["D_mm"].dropna().astype(int).sort_values().unique()
+    )
+    marker_handles = []
+    for dval in diameters_present:
+        mk = marker_for_diameter_local(dval)
+        marker_handles.append(
+            Line2D([0],[0], marker=mk, linestyle="", color="0.2",
+                   markersize=8, label=f"D = {dval} mm")
+        )
+    if avg_freq["D_mm"].isna().any():
+        marker_handles.append(
+            Line2D([0],[0], marker="o", linestyle="", color="0.2",
+                   markersize=8, label="D unknown")
+        )
 
-    if np.isfinite(f0) and np.isfinite(a0):
-        ax2.plot([f0], [a0], 'o', markersize=6, label=f'Peak ~ {f0:.2f} Hz')
-        ax2.annotate(f'{f0:.2f} Hz', xy=(f0, a0), xytext=(5, 5),
-                    textcoords='offset points', fontsize=8)
-        ax2.legend(fontsize=9)
+    # --- 4) Figure ---
+    fig, ax = plt.subplots(figsize=(8, 7))
 
-    ax2.set_title(title)
-    ax2.set_ylabel('Amplitude [peak]')
-    ax2.set_xlabel('Frequency [Hz]')
-    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+    # One series per geometry/folder; points connected in ER order
+    for (folder, D, H), g in avg_freq.groupby(["folder", "D_mm", "H_mm"]):
+        g = g.sort_values("ER_guess")
 
-    ax3.semilogy(f_welch, Pxx)              # PSD reads better on log scale
-    ax3.set_title('Power spectral density (Welch)')
-    ax3.set_xlim(0,10)
-    if lowpass_cutoff is not None:
-        ax3.set_xlim(0,lowpass_cutoff)
-    ax3.set_ylabel('PSD [units²/Hz]')
-    ax3.set_xlabel('Frequency [Hz]')
-    ax3.grid(True, which="both", linestyle="--", alpha=0.4)
+        # label for hover/debug; legend handled separately
+        label = f"{folder}" if (pd.isna(D) or pd.isna(H)) else f"D={int(D)}mm, H={int(H)}mm"
 
-    plt.tight_layout()
+        ax.plot(
+            g["fft_f0_Hz"],            # x
+            g["freq_mean_Hz"],         # y
+            "-o",
+            marker=marker_for_diameter_local(D),
+            markersize=5,
+            linestyle = "--",
+            # linewidth=1.0,
+            color=color_for_height(H),
+            label=label
+        )
 
-    picture_path = Path('pictures')
-    out_dir = picture_path / folderName
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
-    fig.savefig(out_path, dpi=300,bbox_inches='tight')
-    plt.close()
-    return {"fs_Hz": float(fft_fs), "N": int(N), "f0_Hz": float(f0)}
+    # Identity line (y = x)
+    xvals = avg_freq["fft_f0_Hz"].values
+    yvals = avg_freq["freq_mean_Hz"].values
+    x_min = np.nanmin([xvals.min(), yvals.min()])
+    x_max = np.nanmax([xvals.max(), yvals.max()])
+    if np.isfinite(x_min) and np.isfinite(x_max):
+        pad = 0.02 * (x_max - x_min if x_max > x_min else 1.0)
+        lo, hi = x_min - pad, x_max + pad
+        ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1.0, color="0.5")
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+
+    ax.set_xlabel("fft_f0_Hz [Hz]")
+    ax.set_ylabel("freq_mean_Hz [Hz]")
+    ax.set_title("freq_mean_Hz vs fft_f0_Hz")
+    ax.grid(True, alpha=0.3)
+
+    # --- Legends (height colors + diameter markers)
+    leg1 = fig.legend(
+        handles=height_handles,
+        title="Height (color)",
+        fontsize=8,
+        loc="lower left",
+        bbox_to_anchor=(0.05, 0.0)
+    )
+    fig.legend(
+        handles=marker_handles,
+        title="Diameter (marker)",
+        fontsize=8,
+        loc="lower right",
+        bbox_to_anchor=(0.95, 0.0)
+    )
+    _ = leg1  # keep reference
+
+    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
+    plt.show()

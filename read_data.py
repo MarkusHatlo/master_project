@@ -171,7 +171,29 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
     # print("First peak index:", i_peak_pmt)
 
 def plot_pressure(pmt_pressure_df: pd.DataFrame):
-    pmt_pressure_df [""]
+    pmt = pmt_pressure_df["PMT"]
+    P1 = pmt_pressure_df["PMT"]
+    timestamps = pmt_pressure_df['timestamps']
+
+    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=true)
+    ax1.plot(timestamps,pmt)
+    ax1.set_title("PMT vs Time")
+    ax1.set_xlabel("Time")
+    ax1.set_ylabel("PMT")
+    ax1.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax1.legend()
+
+    ax2.plot(timestamps,P1)
+    ax2.set_title("P1 vs Time")
+    ax2.set_xlabel("Time")
+    ax2.set_ylabel("P1")
+    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax2.legend()
+
+    fig.tight_layout()
+    # ax2.set_xlim(ax1.get_xlim())
+    plt.show()
+
 
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
