@@ -170,20 +170,31 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
 
-def plot_pressure(pmt_pressure_df: pd.DataFrame):
+def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
     pmt = pmt_pressure_df["PMT"]
-    P1 = pmt_pressure_df["PMT"]
+    p1 = pmt_pressure_df["PMT"]
     timestamps = pmt_pressure_df['timestamps']
 
-    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=true)
-    ax1.plot(timestamps,pmt)
+    if nth is None:
+        target_pts = 100_000
+        n = len(pmt_pressure_df)
+        nth = max(1, n // target_pts)
+
+    def slice_downsample(t, y, k):
+        return t.iloc[::k], y.iloc[::k]
+
+    ts_pmt, pmt_ds = slice_downsample(timestamps, pmt, nth)
+    ts_p1,  p1_ds  = slice_downsample(timestamps, p1,  nth)
+
+    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=True)
+    ax1.plot(ts_pmt,pmt_ds)
     ax1.set_title("PMT vs Time")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("PMT")
     ax1.grid(True, which="both", linestyle="--", alpha=0.4)
     ax1.legend()
 
-    ax2.plot(timestamps,P1)
+    ax2.plot(ts_p1,p1_ds)
     ax2.set_title("P1 vs Time")
     ax2.set_xlabel("Time")
     ax2.set_ylabel("P1")

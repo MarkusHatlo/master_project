@@ -468,8 +468,8 @@ def plot_freq_mean_vs_f0(
         ax.plot(
             g["fft_f0_Hz"],            # x
             g["freq_mean_Hz"],         # y
-            "-o",
             marker=marker_for_diameter_local(D),
+            linestyle="--",
             markersize=5,
             linewidth=1.0,
             color=color_for_height(H),
@@ -742,4 +742,4 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 # plot_freq_scatter()
 # Add the counted peaks
 # plot_freq_f0_and_a0()
-plot_freq_mean_vs_f0(recompute=True)
+plot_freq_mean_vs_f0()
