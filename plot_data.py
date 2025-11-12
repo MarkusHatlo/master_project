@@ -241,7 +241,6 @@ def plot_LBO():
     # plot_all()
     plot_split_by_D(avg, 88, True)
 
-
 def plot_freq_full():
     """
     Make a 3-row figure:
@@ -380,6 +379,115 @@ def plot_freq_full():
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.95])
 
     plt.show()
+
+def plot_freq_mean_vs_f0():
+    """
+    Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x).
+    One series per (folder, D_mm, H_mm), colored by H_mm, marker by D_mm.
+    Includes a y = x reference line.
+    """
+
+    # --- 1) Load + basic parsing ---
+    freq_df = pd.read_csv("freq_results_8_windows_with_peaks.csv")
+    freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
+
+    # Dimensions from folder name
+    dims = freq_df["folder"].apply(extract_dims)
+    freq_df["D_mm"] = [d for d, h in dims]
+    freq_df["H_mm"] = [h for d, h in dims]
+
+    # --- 2) Average repeated runs at same (folder, D, H, ER) ---
+    avg_freq = (
+        freq_df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+        .agg(
+            fft_f0_Hz    = ("fft_f0_Hz", "mean"),
+            freq_mean_Hz = ("freq_mean_Hz", "mean")
+        )
+    )
+
+    # Early exit if nothing to plot
+    if avg_freq.empty:
+        print("No data to plot after grouping.")
+        return
+
+    # --- 3) Styling helpers ---
+    color_for_height, height_handles = make_height_colors(avg_freq["H_mm"])
+
+    diameters_present = (
+        avg_freq["D_mm"].dropna().astype(int).sort_values().unique()
+    )
+    marker_handles = []
+    for dval in diameters_present:
+        mk = marker_for_diameter_local(dval)
+        marker_handles.append(
+            Line2D([0],[0], marker=mk, linestyle="", color="0.2",
+                   markersize=8, label=f"D = {dval} mm")
+        )
+    if avg_freq["D_mm"].isna().any():
+        marker_handles.append(
+            Line2D([0],[0], marker="o", linestyle="", color="0.2",
+                   markersize=8, label="D unknown")
+        )
+
+    # --- 4) Figure ---
+    fig, ax = plt.subplots(figsize=(8, 7))
+
+    # One series per geometry/folder; points connected in ER order
+    for (folder, D, H), g in avg_freq.groupby(["folder", "D_mm", "H_mm"]):
+        g = g.sort_values("ER_guess")
+
+        # label for hover/debug; legend handled separately
+        label = f"{folder}" if (pd.isna(D) or pd.isna(H)) else f"D={int(D)}mm, H={int(H)}mm"
+
+        ax.plot(
+            g["fft_f0_Hz"],            # x
+            g["freq_mean_Hz"],         # y
+            "-o",
+            marker=marker_for_diameter_local(D),
+            markersize=5,
+            linestyle = "",
+            # linewidth=1.0,
+            color=color_for_height(H),
+            label=label
+        )
+
+    # Identity line (y = x)
+    xvals = avg_freq["fft_f0_Hz"].values
+    yvals = avg_freq["freq_mean_Hz"].values
+    x_min = np.nanmin([xvals.min(), yvals.min()])
+    x_max = np.nanmax([xvals.max(), yvals.max()])
+    if np.isfinite(x_min) and np.isfinite(x_max):
+        pad = 0.02 * (x_max - x_min if x_max > x_min else 1.0)
+        lo, hi = x_min - pad, x_max + pad
+        ax.plot([lo, hi], [lo, hi], linestyle="--", linewidth=1.0, color="0.5")
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+
+    ax.set_xlabel("fft_f0_Hz [Hz]")
+    ax.set_ylabel("freq_mean_Hz [Hz]")
+    ax.set_title("freq_mean_Hz vs fft_f0_Hz")
+    ax.grid(True, alpha=0.3)
+
+    # --- Legends (height colors + diameter markers)
+    leg1 = fig.legend(
+        handles=height_handles,
+        title="Height (color)",
+        fontsize=8,
+        loc="lower left",
+        bbox_to_anchor=(0.05, 0.0)
+    )
+    fig.legend(
+        handles=marker_handles,
+        title="Diameter (marker)",
+        fontsize=8,
+        loc="lower right",
+        bbox_to_anchor=(0.95, 0.0)
+    )
+    _ = leg1  # keep reference
+
+    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
+    plt.show()
+
 
 def plot_freq_scatter(csv_path="freq_results.csv"):
     """
@@ -607,6 +715,7 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 # plot_LBO()
 # plot_freq_full()
-plot_freq_scatter()
+# plot_freq_scatter()
 # Add the counted peaks
 # plot_freq_f0_and_a0()
+plot_freq_mean_vs_f0()
