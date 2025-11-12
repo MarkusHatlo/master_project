@@ -170,6 +170,9 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
 
+def plot_pressure(pmt_pressure_df: pd.DataFrame):
+    pmt_pressure_df [""]
+
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
 
@@ -634,7 +637,6 @@ def calculate_fft(
         "a0_amp" : float(a0)
     }
 
-
 def load_tdms_data(tdms_path: Path):
     #load the tdms data
     assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -718,10 +720,10 @@ def main(do_LBO = False, do_Freq_FFT = False):
         # ------- LBO path: logs 1–3 -------
         if do_LBO and log_no in {1,2,3}:
             print('LBO candidate (log 1-3)')
-            flow_data_df = load_tdms_data(tdms)
-            pmt_pressure_data_df = load_mat_data(mat)
+            flow_dataFrame = load_tdms_data(tdms)
+            pmt_pressure_dataFrame = load_mat_data(mat)
             
-            result = calculate_U_ER(pmt_pressure_data_df, flow_data_df)
+            result = calculate_U_ER(pmt_pressure_dataFrame, flow_dataFrame)
             if result == (None, None, None):
                 no_zero_cross += 1
                 #continue to next file
@@ -745,13 +747,13 @@ def main(do_LBO = False, do_Freq_FFT = False):
         # ------- Frequency path: logs 4,5,6 -------
         elif do_Freq_FFT and log_no in {4,5,6}:
             print('Frequency candidate (log 4,5,6)')
-            pmt_pressure_data_df = load_mat_data(mat)
+            pmt_pressure_dataFrame = load_mat_data(mat)
 
             # try:
             #     print('Detecting peaks')
-            #     peaks = detect_pmt_peaks(pmt_pressure_data_df)
+            #     peaks = detect_pmt_peaks(pmt_pressure_dataFrame)
             #     print('Plotting')
-            #     plot_with_peaks(pmt_pressure_data_df, peaks, mat.stem, tdms.stem, mat.parent.name)
+            #     plot_with_peaks(pmt_pressure_dataFrame, peaks, mat.stem, tdms.stem, mat.parent.name)
             #     print('Calculating freq')
             #     stats = peak_period_frequency(peaks)
             # except ValueError:
@@ -768,7 +770,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
 
             try:
                 print('Calculating FFT')
-                fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+                fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name)
                 f0 = fft_stats["f0_Hz"]
                 a0 = fft_stats["a0_amp"]
                 if f0 is None or (isinstance(f0, float) and np.isnan(f0)):
@@ -851,16 +853,16 @@ start = time.time()
 # tdms = base_path / 'ER1_0.95_log6_01.09.2025_11.53.29.tdms'
 # mat  = base_path / 'Up_53_ERp_0.95_PH2p_0_11_53_32.mat'
 
-# pmt_pressure_data_df = load_mat_data(mat)
-# fft_stats = calculate_fft(pmt_pressure_data_df['PMT'],pmt_pressure_data_df['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
+# pmt_pressure_dataFrame = load_mat_data(mat)
+# fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
 
 base_path = Path(r'data\29_08_D_88mm_260mm')
 tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
 mat  = base_path / 'LBO_Sweep_2_12_41_26.mat'
 
-flow_data_df = load_tdms_data(tdms)
-pmt_pressure_data_df = load_mat_data(mat)
-calculate_U_ER(pmt_pressure_data_df,flow_data_df,True)
+flow_dataFrame = load_tdms_data(tdms)
+pmt_pressure_dataFrame = load_mat_data(mat)
+calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")
