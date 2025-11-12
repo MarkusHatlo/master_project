@@ -172,7 +172,7 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
 
 def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
     pmt = pmt_pressure_df["PMT"]
-    p1 = pmt_pressure_df["PMT"]
+    p1 = pmt_pressure_df["P1"]
     timestamps = pmt_pressure_df['timestamps']
 
     if nth is None:
@@ -187,14 +187,14 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
     ts_p1,  p1_ds  = slice_downsample(timestamps, p1,  nth)
 
     fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=True)
-    ax1.plot(ts_pmt,pmt_ds)
+    ax1.plot(ts_pmt,pmt_ds,label='PMT')
     ax1.set_title("PMT vs Time")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("PMT")
     ax1.grid(True, which="both", linestyle="--", alpha=0.4)
     ax1.legend()
 
-    ax2.plot(ts_p1,p1_ds)
+    ax2.plot(ts_p1,p1_ds,color='red',label='P1')
     ax2.set_title("P1 vs Time")
     ax2.set_xlabel("Time")
     ax2.set_ylabel("P1")
@@ -242,7 +242,7 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     air_volumflow_blow_off = flow_df['air_volum_flow'][nearest_idx_flow]
     print(f'Air at blow off{air_volumflow_blow_off}')
     CH4_volumflow_blow_off = flow_df['CH4_volum_flow'][nearest_idx_flow]
-    print(f'Air at blow off{CH4_volumflow_blow_off}')
+    print(f'CH4 at blow off{CH4_volumflow_blow_off}')
     total_volumflow_blow_off = air_volumflow_blow_off + CH4_volumflow_blow_off
     U_blow_off = float(total_volumflow_blow_off / area_cross_section / 1000 / 60)
 
@@ -889,13 +889,13 @@ start = time.time()
 # pmt_pressure_dataFrame = load_mat_data(mat)
 # fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
 
-base_path = Path(r'data\29_08_D_88mm_260mm')
-tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
-mat  = base_path / 'LBO_Sweep_2_12_41_26.mat'
+base_path = Path(r'data\28_08_D_100mm_260mm')
+# tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
+mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
 
-flow_dataFrame = load_tdms_data(tdms)
+# flow_dataFrame = load_tdms_data(tdms)
 pmt_pressure_dataFrame = load_mat_data(mat)
-calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
+plot_pressure(pmt_pressure_dataFrame)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")

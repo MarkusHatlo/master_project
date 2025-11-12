@@ -469,7 +469,7 @@ def plot_freq_mean_vs_f0(
             g["fft_f0_Hz"],            # x
             g["freq_mean_Hz"],         # y
             marker=marker_for_diameter_local(D),
-            linestyle="--",
+            linestyle="",
             markersize=5,
             linewidth=1.0,
             color=color_for_height(H),
@@ -488,9 +488,9 @@ def plot_freq_mean_vs_f0(
         ax.set_xlim(lo, hi)
         ax.set_ylim(lo, hi)
 
-    ax.set_xlabel("fft_f0_Hz [Hz]")
-    ax.set_ylabel("freq_mean_Hz [Hz]")
-    ax.set_title("freq_mean_Hz vs fft_f0_Hz (averaged)")
+    ax.set_xlabel("FFT frequency [Hz]")
+    ax.set_ylabel("Counted peaks frequency [Hz]")
+    ax.set_title("Counted peaks frequency vs FFT frequency")
     ax.grid(True, alpha=0.3)
 
     # Legends
