@@ -205,7 +205,6 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
     # ax2.set_xlim(ax1.get_xlim())
     plt.show()
 
-
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
 
