@@ -282,19 +282,19 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     # ax.set_ylabel('Velocity [m/s]')
     # plt.show()
 
-def detect_pmt_peaks(df, col='PMT',
+def detect_pmt_peaks(x, ts, col='PMT',
                      smooth_ms=10,         # small smoothing for noise
-                     baseline_ms=300,      # rolling-median baseline removal
+                     baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
-                     prominence_sigma=7.0, # how strong above noise
+                     prominence_sigma=10.0, # how strong above noise
                      rel_height=0.5):      # width at 50% prominence
     """
     df: DataFrame with columns ['timestamps', col]
     Returns: peaks_df with timestamp, height, prominence, width_s, left_base_ts, right_base_ts
     """
-    ts = pd.to_datetime(df['timestamps'])
-    x  = df[col].to_numpy(dtype=float)
+    # ts = pd.to_datetime(df['timestamps'])
+    # x  = df[col].to_numpy(dtype=float)
 
     # --- sampling rate ---
     dt = ts.diff().dt.total_seconds().median()
@@ -399,16 +399,29 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
         "freq_MAD_Hz": float(freq_mad),
     }
 
-def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str):
-    fig, ax = plt.subplots(1, 1, figsize=(11, 3.5))
-    ax.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
-    ax.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
-    ax.set_title("PMT vs Time (with peaks)")
-    ax.set_xlabel("Time")
-    ax.set_ylabel("PMT")
-    ax.grid(True, which="both", linestyle="--", alpha=0.4)
-    ax.legend()
+def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
+    fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
+    ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
+    ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
+    ax1.axvspan(
+        pmt_pressure_df['timestamps'].iloc[window_start],
+        pmt_pressure_df['timestamps'].iloc[window_stop-1],
+        color='grey',
+        alpha=0.2)
+    ax1.set_title("PMT vs Time (with peaks)")
+    ax1.set_xlabel("Time")
+    ax1.set_ylabel("PMT")
+    ax1.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax1.legend()
     plt.tight_layout()
+
+    flow_df.plot(ax=ax2, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
+    ax2.set_title("Mass Flow vs Time")
+    ax2.set_xlabel("Time")
+    ax2.set_ylabel("Mass flow")
+    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax2.legend()
+    fig.tight_layout()
 
     picture_path = Path('pictures')
     out_dir = picture_path / 'LBO' / folderName
@@ -669,6 +682,21 @@ def calculate_fft(
         "a0_amp" : float(a0)
     }
 
+def calculating_window(df, flow_df):
+        steady_state_air = flow_df['air_volum_flow'].iloc[:5000].mean()
+        print('steady_state_air', steady_state_air)
+        ramping_idx_air = np.where(flow_df['air_volum_flow'] > 1.0*steady_state_air)[0]
+        i_ramping_air = int(ramping_idx_air[0])
+        ramp_time = flow_df['Time'].iloc[i_ramping_air]
+        start_idx_pmt = (df['timestamps'] - ramp_time).abs().idxmin()
+
+        all_cross_idxs = np.where(df['PMT'] <= crossing_threshold)[0]
+        cross_after_ramp = all_cross_idxs[all_cross_idxs > start_idx_pmt]
+        stop_idx = int(cross_after_ramp[0])
+
+        print('Start idx', start_idx_pmt,'Stop idx', stop_idx)
+        return start_idx_pmt, stop_idx
+
 def load_tdms_data(tdms_path: Path):
     #load the tdms data
     assert tdms_path.exists(), f"Not found: {tdms_path}"
@@ -724,7 +752,7 @@ def load_mat_data(mat_path: Path):
 crossing_threshold = 0
 def main(do_LBO = False, do_Freq_FFT = False):
 
-    base_path = Path('data')
+    base_path = Path('data_test')
     files = iter_data_files(base_path, True)
 
     #Find the pairs in the code
@@ -779,13 +807,19 @@ def main(do_LBO = False, do_Freq_FFT = False):
         # ------- Frequency path: logs 4,5,6 -------
         elif do_Freq_FFT and log_no in {1,2,3}:
             print('Frequency candidate (log 1,2,3)')
+            flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
+            print('Defining calculation windows')
+            if log_no in {1,2,3}:
+                window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
+                pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
+                time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
 
             try:
                 print('Detecting peaks')
-                peaks = detect_pmt_peaks(pmt_pressure_dataFrame)
+                peaks = detect_pmt_peaks(pmt_window, time_window)
                 print('Plotting')
-                plot_with_peaks(pmt_pressure_dataFrame, peaks, mat.stem, tdms.stem, mat.parent.name)
+                plot_with_peaks(pmt_pressure_dataFrame, peaks,flow_dataFrame, mat.stem, tdms.stem, mat.parent.name,window_start,window_stop)
                 print('Calculating freq')
                 stats = peak_period_frequency(peaks)
             except ValueError:
@@ -802,7 +836,7 @@ def main(do_LBO = False, do_Freq_FFT = False):
 
             try:
                 print('Calculating FFT')
-                fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name)
+                fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
                 f0 = fft_stats["f0_Hz"]
                 a0 = fft_stats["a0_amp"]
                 if f0 is None or (isinstance(f0, float) and np.isnan(f0)):
