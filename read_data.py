@@ -411,7 +411,7 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, matFil
     plt.tight_layout()
 
     picture_path = Path('pictures')
-    out_dir = picture_path / folderName
+    out_dir = picture_path / 'LBO' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -655,7 +655,7 @@ def calculate_fft(
 
     # --- save figure ---
     picture_path = Path('pictures')
-    out_dir = picture_path / folderName
+    out_dir = picture_path / 'LBO' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -777,28 +777,28 @@ def main(do_LBO = False, do_Freq_FFT = False):
             })
 
         # ------- Frequency path: logs 4,5,6 -------
-        elif do_Freq_FFT and log_no in {4,5,6}:
-            print('Frequency candidate (log 4,5,6)')
+        elif do_Freq_FFT and log_no in {1,2,3}:
+            print('Frequency candidate (log 1,2,3)')
             pmt_pressure_dataFrame = load_mat_data(mat)
 
-            # try:
-            #     print('Detecting peaks')
-            #     peaks = detect_pmt_peaks(pmt_pressure_dataFrame)
-            #     print('Plotting')
-            #     plot_with_peaks(pmt_pressure_dataFrame, peaks, mat.stem, tdms.stem, mat.parent.name)
-            #     print('Calculating freq')
-            #     stats = peak_period_frequency(peaks)
-            # except ValueError:
-            #     freq_fail += 1
-            #     print("Not enough peaks to compute frequency; skipping.")
-            #     continue
-            # except Exception as e:
-            #     freq_fail += 1
-            #     print(f"Peak/frequency computation failed: {e}")
-            #     continue
+            try:
+                print('Detecting peaks')
+                peaks = detect_pmt_peaks(pmt_pressure_dataFrame)
+                print('Plotting')
+                plot_with_peaks(pmt_pressure_dataFrame, peaks, mat.stem, tdms.stem, mat.parent.name)
+                print('Calculating freq')
+                stats = peak_period_frequency(peaks)
+            except ValueError:
+                freq_fail += 1
+                print("Not enough peaks to compute frequency; skipping.")
+                continue
+            except Exception as e:
+                freq_fail += 1
+                print(f"Peak/frequency computation failed: {e}")
+                continue
 
-            # print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
-            #       f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
+            print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
+                  f"(median {stats['freq_median_Hz']:.3f}, MAD {stats['freq_MAD_Hz']:.3f})")
 
             try:
                 print('Calculating FFT')
@@ -826,12 +826,12 @@ def main(do_LBO = False, do_Freq_FFT = False):
                 "mat_file": mat.name,
                 "tdms_file": tdms.name,
                 "log_no": log_no,
-                # "n_peaks": stats["n_peaks"],
-                # "n_intervals": stats["n_intervals"],
-                # "freq_mean_Hz": stats["freq_mean_Hz"],
-                # "freq_std_Hz": stats["freq_std_Hz"],
-                # "freq_median_Hz": stats["freq_median_Hz"],
-                # "freq_MAD_Hz": stats["freq_MAD_Hz"],
+                "n_peaks": stats["n_peaks"],
+                "n_intervals": stats["n_intervals"],
+                "freq_mean_Hz": stats["freq_mean_Hz"],
+                "freq_std_Hz": stats["freq_std_Hz"],
+                "freq_median_Hz": stats["freq_median_Hz"],
+                "freq_MAD_Hz": stats["freq_MAD_Hz"],
                 "fft_f0_Hz": f0,
                 "fft_a0_amp": a0,
             })
@@ -871,12 +871,12 @@ def main(do_LBO = False, do_Freq_FFT = False):
 
 
     print(f'No-zero-cross (LBO) skipped: {no_zero_cross}')
-    # print(f'Frequency failures (not enough peaks): {freq_fail}')
+    print(f'Frequency failures (not enough peaks): {freq_fail}')
     print(f'FFT failures: {fft_fail}')
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-# main(False, True)
+main(False, True)
 
 # base_path = Path(r'data\01_09_D_120mm_260mm')
 # # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
@@ -888,13 +888,13 @@ start = time.time()
 # pmt_pressure_dataFrame = load_mat_data(mat)
 # fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
 
-base_path = Path(r'data\28_08_D_100mm_260mm')
-# tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
-mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
+# base_path = Path(r'data\28_08_D_100mm_260mm')
+# # tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
+# mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
 
-# flow_dataFrame = load_tdms_data(tdms)
-pmt_pressure_dataFrame = load_mat_data(mat)
-plot_pressure(pmt_pressure_dataFrame)
+# # flow_dataFrame = load_tdms_data(tdms)
+# pmt_pressure_dataFrame = load_mat_data(mat)
+# plot_pressure(pmt_pressure_dataFrame)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")
