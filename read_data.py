@@ -175,26 +175,26 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
     p1 = pmt_pressure_df["P1"]
     timestamps = pmt_pressure_df['timestamps']
 
-    if nth is None:
-        target_pts = 100_000
-        n = len(pmt_pressure_df)
-        nth = max(1, n // target_pts)
+    # if nth is None:
+    #     target_pts = 100_000
+    #     n = len(pmt_pressure_df)
+    #     nth = max(1, n // target_pts)
 
-    def slice_downsample(t, y, k):
-        return t.iloc[::k], y.iloc[::k]
+    # def slice_downsample(t, y, k):
+    #     return t.iloc[::k], y.iloc[::k]
 
-    ts_pmt, pmt_ds = slice_downsample(timestamps, pmt, nth)
-    ts_p1,  p1_ds  = slice_downsample(timestamps, p1,  nth)
+    # ts_pmt, pmt_ds = slice_downsample(timestamps, pmt, nth)
+    # ts_p1,  p1_ds  = slice_downsample(timestamps, p1,  nth)
 
     fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=True)
-    ax1.plot(ts_pmt,pmt_ds,label='PMT')
+    ax1.plot(timestamps,pmt,label='PMT')
     ax1.set_title("PMT vs Time")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("PMT")
     ax1.grid(True, which="both", linestyle="--", alpha=0.4)
     ax1.legend()
 
-    ax2.plot(ts_p1,p1_ds,color='red',label='P1')
+    ax2.plot(timestamps,p1,color='red',label='P1')
     ax2.set_title("P1 vs Time")
     ax2.set_xlabel("Time")
     ax2.set_ylabel("P1")
@@ -750,9 +750,9 @@ def load_mat_data(mat_path: Path):
 
 # Choose a threshold for "near zero" (1% of max is a decent default)
 crossing_threshold = 0
-def main(do_LBO = False, do_Freq_FFT = False):
+def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
 
-    base_path = Path('data_test')
+    base_path = Path('data')
     files = iter_data_files(base_path, True)
 
     #Find the pairs in the code
@@ -869,6 +869,12 @@ def main(do_LBO = False, do_Freq_FFT = False):
                 "fft_f0_Hz": f0,
                 "fft_a0_amp": a0,
             })
+        elif do_Pressure:
+            print('Frequency candidate (log 1,2,3)')
+            flow_dataFrame = load_tdms_data(tdms)
+            pmt_pressure_dataFrame = load_mat_data(mat)
+            print('Plotting pressure')
+            plot_pressure()
 
 
     # ------- Count and present unpaired files -------

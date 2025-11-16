@@ -252,7 +252,7 @@ def plot_freq_full():
     """
 
     # --- 1. Load frequency data from logs 4-6 ---
-    freq_df = pd.read_csv("freq_results_8_windows_with_peaks.csv")
+    freq_df = pd.read_csv("freq_results.csv")
 
     freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
 
@@ -381,7 +381,7 @@ def plot_freq_full():
     plt.show()
 
 def load_or_make_avg_freq(
-    src_csv: str = "freq_results_8_windows_with_peaks.csv",
+    src_csv: str = "freq_results.csv",
     avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
     force_recompute: bool = False,
 ) -> pd.DataFrame:
@@ -426,7 +426,7 @@ def load_or_make_avg_freq(
 def plot_freq_mean_vs_f0(
     avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
     recompute: bool = False,
-    src_csv: str = "freq_results_8_windows_with_peaks.csv",
+    src_csv: str = "freq_results.csv",
 ):
     """
     Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x),
@@ -571,7 +571,7 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
-    do_manual = True
+    do_manual = False
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
         1, 1, figsize=(9, 10), sharex=False
@@ -579,6 +579,7 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
 
     # 1) freq vs U
     if do_manual:
+        # log 4 5 6
         #88 200,88 260,88 350,100 260,120 260        
         ax_u.set_xlabel('U [m/s]')
         ax_u.set_ylabel("FFT peak frequency [Hz]")
@@ -739,7 +740,7 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 # plot_LBO()
 # plot_freq_full()
-# plot_freq_scatter()
+plot_freq_scatter()
 # Add the counted peaks
 # plot_freq_f0_and_a0()
-plot_freq_mean_vs_f0()
+# plot_freq_mean_vs_f0()
