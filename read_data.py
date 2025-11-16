@@ -170,7 +170,7 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
 
-def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
+def plot_pressure(pmt_pressure_df: pd.DataFrame, folderName: 'str', matFileName: 'str', tdmsFileName: 'str', nth:int = None):
     pmt = pmt_pressure_df["PMT"]
     p1 = pmt_pressure_df["P1"]
     timestamps = pmt_pressure_df['timestamps']
@@ -203,7 +203,12 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, nth:int = None):
 
     fig.tight_layout()
     # ax2.set_xlim(ax1.get_xlim())
-    plt.show()
+    picture_path = Path('pictures')
+    out_dir = picture_path / 'pressure' / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
+    fig.savefig(out_path, dpi=300,bbox_inches='tight')
+    plt.close()
 
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
