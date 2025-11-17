@@ -291,7 +291,7 @@ def detect_pmt_peaks(x, ts, col='PMT',
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
-                     prominence_sigma=10.0, # how strong above noise
+                     prominence_sigma=7.0, # how strong above noise
                      rel_height=0.5):      # width at 50% prominence
     """
     df: DataFrame with columns ['timestamps', col]
@@ -404,7 +404,7 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
     }
 
 def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
-    fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
+    fig, [ax1,ax2] = plt.subplots(1, 1, figsize=(11, 3.5))
     ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
     ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
     ax1.axvspan(
@@ -428,7 +428,7 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_d
     fig.tight_layout()
 
     picture_path = Path('pictures')
-    out_dir = picture_path / 'LBO' / folderName
+    out_dir = picture_path / 'LBO_last_version' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -494,10 +494,7 @@ def calculate_fft(
     total_N = len(x)
 
     if nperseg is None:
-        # heuristic:
-        # - aim ~1/8 of total length
-        # - but not below 256 samples, and not above total_N
-        guess = max(256, total_N // 6)
+        guess = max(256, total_N)
         nperseg = min(guess, total_N)
 
     if nperseg > total_N:
@@ -672,7 +669,7 @@ def calculate_fft(
 
     # --- save figure ---
     picture_path = Path('pictures')
-    out_dir = picture_path / 'LBO' / folderName
+    out_dir = picture_path / 'LBO_last_version' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -687,7 +684,7 @@ def calculate_fft(
     }
 
 def calculating_window(df, flow_df):
-        steady_state_air = flow_df['air_volum_flow'].iloc[:5000].mean()
+        steady_state_air = flow_df['air_volum_flow'].iloc[:5].mean()
         print('steady_state_air', steady_state_air)
         ramping_idx_air = np.where(flow_df['air_volum_flow'] > 1.0*steady_state_air)[0]
         i_ramping_air = int(ramping_idx_air[0])
@@ -756,7 +753,7 @@ def load_mat_data(mat_path: Path):
 crossing_threshold = 0
 def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
 
-    base_path = Path('data')
+    base_path = Path('data_only_good')
     files = iter_data_files(base_path, True)
 
     #Find the pairs in the code
@@ -813,11 +810,16 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             print('Frequency candidate (log 1,2,3)')
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
-            print('Defining calculation windows')
             if log_no in {1,2,3}:
+                print('Defining calculation windows')
                 window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
                 pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
                 time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
+            else:
+                pmt_window   = pmt_pressure_dataFrame['PMT']
+                time_window  = pmt_pressure_dataFrame['timestamps']
+                window_start = 0
+                window_stop = 0
 
             try:
                 print('Detecting peaks')
@@ -919,7 +921,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(do_Pressure=True)
+main(do_Freq_FFT=True)
 
 # base_path = Path(r'data\01_09_D_120mm_260mm')
 # # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'

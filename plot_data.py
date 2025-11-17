@@ -424,7 +424,7 @@ def load_or_make_avg_freq(
     return avg_freq
 
 def plot_freq_mean_vs_f0(
-    avg_csv: str = "freq_avg_by_folder_D_H_ER_456.csv",
+    avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
     recompute: bool = False,
     src_csv: str = "freq_results_8_windows_with_peaks.csv",
 ):
@@ -513,14 +513,8 @@ def plot_freq_mean_vs_f0(
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
     plt.show()
 
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.cm import get_cmap
-
 def plot_freq_points_vs_f0(
-    src_csv="freq_results_LBO.csv",
+    src_csv="freq_results_log456_last.csv",
     point_alpha=0.85,
     marker_size_pts=6,
 ):
@@ -667,7 +661,7 @@ def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
-    do_manual = True
+    do_manual = False
     LBO_manual = False
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
@@ -859,10 +853,10 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 # plot_LBO()
 
-# plot_freq_full()
-# plot_freq_scatter()
+plot_freq_full()
+plot_freq_scatter()
 
 # plot_freq_f0_and_a0()
 
-# plot_freq_mean_vs_f0()
-plot_freq_points_vs_f0()
+# plot_freq_mean_vs_f0(src_csv='freq_results_log456_last.csv')
+# plot_freq_points_vs_f0('freq_results_log456_last.csv')
