@@ -424,9 +424,9 @@ def load_or_make_avg_freq(
     return avg_freq
 
 def plot_freq_mean_vs_f0(
-    avg_csv: str = "freq_avg_by_folder_D_H_ER.csv",
+    avg_csv: str = "freq_avg_by_folder_D_H_ER_456.csv",
     recompute: bool = False,
-    src_csv: str = "freq_results.csv",
+    src_csv: str = "freq_results_8_windows_with_peaks.csv",
 ):
     """
     Scatter/line plot comparing freq_mean_Hz (y) vs fft_f0_Hz (x),
@@ -458,7 +458,7 @@ def plot_freq_mean_vs_f0(
                    markersize=8, label="D unknown")
         )
 
-    fig, ax = plt.subplots(figsize=(8, 7))
+    fig, ax = plt.subplots(figsize=(7, 7))
 
     # One series per (folder, D, H); connect points by ER for visual continuity
     for (folder, D, H), g in avg_freq.groupby(["folder", "D_mm", "H_mm"]):
@@ -513,6 +513,101 @@ def plot_freq_mean_vs_f0(
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
     plt.show()
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.cm import get_cmap
+
+def plot_freq_points_vs_f0(
+    src_csv="freq_results_LBO.csv",
+    point_alpha=0.85,
+    marker_size_pts=6,
+):
+    df = pd.read_csv(src_csv)
+
+    # If you’re deriving D/H from folder names:
+    dims = df["folder"].apply(extract_dims)  # must return (D_mm, H_mm)
+    df["D_mm"] = [d for d, h in dims]
+    df["H_mm"] = [h for d, h in dims]
+
+    # Color by height, just like before
+    color_for_height, height_handles = make_height_colors(df["H_mm"])
+
+    # Marker by diameter, just like before
+    diameters_present = (
+        df["D_mm"].dropna().astype(int).sort_values().unique()
+        if "D_mm" in df.columns else []
+    )
+    marker_handles = []
+    for dval in diameters_present:
+        mk = marker_for_diameter_local(dval)
+        marker_handles.append(
+            Line2D([0],[0], marker=mk, linestyle="", color="0.2",
+                   markersize=8, label=f"D = {dval} mm")
+        )
+    if df["D_mm"].isna().any():
+        marker_handles.append(
+            Line2D([0],[0], marker="o", linestyle="", color="0.2",
+                   markersize=8, label="D unknown")
+        )
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    # Batch by (D,H) so each subgroup gets its marker+color
+    for (D, H), g in df.groupby(["D_mm", "H_mm"]):
+        mk = marker_for_diameter_local(int(D)) if pd.notna(D) else "o"
+        c  = color_for_height(H)
+
+        ax.errorbar(
+            g["fft_f0_Hz"].to_numpy(),
+            g["freq_mean_Hz"].to_numpy(),
+            yerr=g["freq_std_Hz"].to_numpy(),
+            fmt=mk,                 # marker shape from diameter
+            linestyle="",           # points only
+            ms=marker_size_pts,     # marker size in points (errorbar uses 'ms')
+            elinewidth=1.0,
+            capsize=2.5,
+            alpha=point_alpha,
+            color=c,                # color from height
+        )
+
+    # y = x and symmetric-ish limits
+    xvals = df["fft_f0_Hz"].to_numpy()
+    yvals = df["freq_mean_Hz"].to_numpy()
+    lo = np.nanmin([np.nanmin(xvals), np.nanmin(yvals)])
+    hi = np.nanmax([np.nanmax(xvals), np.nanmax(yvals)])
+    pad = 0.02 * (hi - lo if hi > lo else 1.0)
+    lo, hi = lo - pad, hi + pad
+    ax.plot([lo, hi], [lo, hi], "--", linewidth=1.0, color="0.5")
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+
+    ax.set_xlabel("FFT frequency [Hz]")
+    ax.set_ylabel("Counted peaks frequency [Hz]")
+    ax.set_title("Counted peaks vs FFT — all points")
+    ax.grid(True, alpha=0.3)
+
+    # Legends (same layout philosophy as before)
+    leg1 = fig.legend(
+        handles=height_handles,
+        title="Height (color)",
+        fontsize=8,
+        loc="lower left",
+        bbox_to_anchor=(0.05, 0.0)
+    )
+    fig.legend(
+        handles=marker_handles,
+        title="Diameter (marker)",
+        fontsize=8,
+        loc="lower right",
+        bbox_to_anchor=(0.95, 0.0)
+    )
+    _ = leg1
+
+    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
+    plt.show()
+    
 def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
     """
     Make a 3-row figure:
@@ -572,34 +667,56 @@ def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
-    do_manual = False
+    do_manual = True
+    LBO_manual = False
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
-        1, 1, figsize=(9, 10), sharex=False
+        1, 1, figsize=(8, 8), sharex=False
     )
 
     # 1) freq vs U
     if do_manual:
-        # log 4 5 6
-        #88 200,88 260,88 350,100 260,120 260        
-        ax_u.set_xlabel('U [m/s]')
-        ax_u.set_ylabel("FFT peak frequency [Hz]")
-        ax_u.grid(True, alpha=0.3)
-        manual_freq_88_200 = [0.59,0.87,1.17,1.41]
-        manual_vel_88_200 = [14,28,35,42]
-        ax_u.plot(manual_vel_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+        # log 1 2 3
+        if LBO_manual:
+            ax_u.set_xlabel('U [m/s]')
+            ax_u.set_ylabel("FFT peak frequency [Hz]")
+            ax_u.grid(True, alpha=0.3)
+            manual_freq_88_200 = [1.2,0.65,0.6,0.5,0.47,0.58]
+            manual_vel_88_200 = [9,15.6,28.6,35.7,43,54]
+            ax_u.plot(manual_vel_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
 
-        manual_freq_88_260 = [0.59,1.19,2.19,1.99,1.89]
-        manual_vel_88_260 = [8,15,39.4,49.7,59.6]
-        ax_u.plot(manual_vel_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+            manual_freq_88_260 = [1.2,1.3,3,4.5,5.2]
+            manual_vel_88_260 = [16,41,51,60,67]
+            ax_u.plot(manual_vel_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
 
-        manual_freq_88_350 = [0.72,0.62,1.63,2.34,2.21]
-        manual_vel_88_350 = [7,8,14,20,26]
-        ax_u.plot(manual_vel_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+            manual_freq_88_350 = [0.82,1.9,1.72,2.2]
+            manual_vel_88_350 = [9,21,16,27]
+            ax_u.plot(manual_vel_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
 
-        manual_freq_100_260 = [1.17,0.72,0.56,1.04,1.14]
-        manual_vel_100_260 = [14,20,22.44,32,42]
-        ax_u.plot(manual_vel_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+            manual_freq_100_260 = [0.37,0.2,0.23]
+            manual_vel_100_260 = [23,46,54]
+            ax_u.plot(manual_vel_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
+        else:
+            # log 4 5 6
+            #88 200,88 260,88 350,100 260,120 260        
+            ax_u.set_xlabel('U [m/s]')
+            ax_u.set_ylabel("FFT peak frequency [Hz]")
+            ax_u.grid(True, alpha=0.3)
+            manual_freq_88_200 = [0.59,0.87,1.17,1.41]
+            manual_vel_88_200 = [14,28,35,42]
+            ax_u.plot(manual_vel_88_200,manual_freq_88_200,color='blue',linestyle='', marker='o', label='D: 88 H: 200')
+
+            manual_freq_88_260 = [0.59,1.19,2.19,1.99,1.89]
+            manual_vel_88_260 = [8,15,39.4,49.7,59.6]
+            ax_u.plot(manual_vel_88_260,manual_freq_88_260,color='purple',linestyle='',marker='o', label='D: 88 H: 260')
+
+            manual_freq_88_350 = [0.72,0.62,1.63,2.34,2.21]
+            manual_vel_88_350 = [7,8,14,20,26]
+            ax_u.plot(manual_vel_88_350,manual_freq_88_350,color='green',linestyle='',marker='o', label='D: 88 H: 350')
+
+            manual_freq_100_260 = [1.17,0.72,0.56,1.04,1.14]
+            manual_vel_100_260 = [14,20,22.44,32,42]
+            ax_u.plot(manual_vel_100_260,manual_freq_100_260,color='red',linestyle='',marker='o', label='D: 100 H: 260')
 
         # manual_freq_120_260 = [1.15,0.85,]
         # manual_vel_120_260 = [7,17,26]
@@ -739,9 +856,13 @@ def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
 
 
 
+
 # plot_LBO()
+
 # plot_freq_full()
-plot_freq_scatter()
-# Add the counted peaks
+# plot_freq_scatter()
+
 # plot_freq_f0_and_a0()
+
 # plot_freq_mean_vs_f0()
+plot_freq_points_vs_f0()
