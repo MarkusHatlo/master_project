@@ -7,6 +7,10 @@ import scipy.io as sio
 from datetime import datetime, timedelta
 
 
+DATA_ROOT = Path("data")  # <-- change if needed
+
+FREQ_CSV = Path("freq_results_LBO.csv")  # e.g. "freq_results_8_windows_with_peaks.csv"
+
 crossing_threshold = 0
 
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame):
@@ -108,14 +112,73 @@ def load_tdms_data(tdms_path: Path):
 
         return flow_df
 
-# Start a looop
-# Here it should read freq_results.csv and find the tdms file to read
+def main():
+    # 1. Read the frequency CSV
+    assert FREQ_CSV.exists(), f"CSV not found: {FREQ_CSV}"
+    freq_df = pd.read_csv(FREQ_CSV)
 
-flow_dataFrame = load_tdms_data(tdms)
-pmt_pressure_dataFrame = load_mat_data(mat)
+    # Prepare columns that we will append
+    ER_list = []
+    U_list = []
+    dt_s_list = []  # time difference in seconds
 
-er, u , time_diff = calculate_U_ER(pmt_pressure_dataFrame, flow_dataFrame)
+    for idx, row in freq_df.iterrows():
+        print("\n" + "-" * 60)
+        print(f"[ROW {idx}] folder={row.get('folder')} mat={row.get('mat_file')} tdms={row.get('tdms_file')}")
 
-# append er, u , time_diff to freq_results.csv
+        try:
+            folder = Path(row['folder']) if 'folder' in row else Path(".")
+            mat_name = row['mat_file']
+            tdms_name = row['tdms_file']
+        except KeyError as e:
+            print(f"[ERROR] Missing column in CSV: {e}")
+            ER_list.append(np.nan)
+            U_list.append(np.nan)
+            dt_s_list.append(np.nan)
+            continue
+
+        mat_path = DATA_ROOT / folder / mat_name
+        tdms_path = DATA_ROOT / folder / tdms_name
+
+        if not mat_path.exists():
+            print(f"[WARN] MAT file not found: {mat_path}")
+            ER_list.append(np.nan)
+            U_list.append(np.nan)
+            dt_s_list.append(np.nan)
+            continue
+
+        if not tdms_path.exists():
+            print(f"[WARN] TDMS file not found: {tdms_path}")
+            ER_list.append(np.nan)
+            U_list.append(np.nan)
+            dt_s_list.append(np.nan)
+            continue
+
+        # Load data and compute ER, U, Δt
+        pmt_pressure_df = load_mat_data(mat_path)
+        flow_df = load_tdms_data(tdms_path)
+        ER_blow_off, U_blow_off, cross_time_diff = calculate_U_ER(pmt_pressure_df, flow_df)
+
+        if ER_blow_off is None:
+            # This means no crossing was found
+            ER_list.append(np.nan)
+            U_list.append(np.nan)
+            dt_s_list.append(np.nan)
+        else:
+            ER_list.append(ER_blow_off)
+            U_list.append(U_blow_off)
+            dt_s_list.append(cross_time_diff.total_seconds())
+
+    # 2. Append new columns to dataframe
+    freq_df['ER_blow_off'] = ER_list
+    freq_df['U_blow_off_m_per_s'] = U_list
+    freq_df['blowoff_dt_s'] = dt_s_list
+
+    # 3. Save to a *new* CSV to be safe
+    out_path = FREQ_CSV.with_name(FREQ_CSV.stem + "_with_ER_U.csv")
+    freq_df.to_csv(out_path, index=False)
+    print("\nSaved updated CSV to:", out_path)
 
 
+if __name__ == "__main__":
+    main()

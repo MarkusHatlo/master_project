@@ -513,7 +513,7 @@ def plot_freq_mean_vs_f0(
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
     plt.show()
 
-def plot_freq_scatter(csv_path="freq_results.csv"):
+def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
     """
     Make a 3-row figure:
 
@@ -539,7 +539,8 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
     freq_df["H_mm"] = [h for d, h in dims]
 
     # --- U from mat_file (Up_### in the .mat filename) ---
-    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+    # freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+    freq_df["U"] = freq_df['U_blow_off_m_per_s']
 
     # --- ER from file names ---
     er_from_tdms = freq_df["tdms_file"].astype(str).apply(extract_ER_from_name)
@@ -571,7 +572,7 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
-    do_manual = True
+    do_manual = False
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
         1, 1, figsize=(9, 10), sharex=False
