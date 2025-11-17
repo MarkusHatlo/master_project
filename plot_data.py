@@ -571,7 +571,7 @@ def plot_freq_scatter(csv_path="freq_results.csv"):
         ax.set_ylabel("FFT peak frequency [Hz]")
         ax.grid(True, alpha=0.3)
 
-    do_manual = False
+    do_manual = True
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
         1, 1, figsize=(9, 10), sharex=False

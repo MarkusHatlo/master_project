@@ -170,7 +170,7 @@ def plot_pmt(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame,show_plot: boo
     # i_peak_pmt = int(peak_idx_pmt[0])
     # print("First peak index:", i_peak_pmt)
 
-def plot_pressure(pmt_pressure_df: pd.DataFrame, folderName: 'str', matFileName: 'str', tdmsFileName: 'str', nth:int = None):
+def plot_pressure(pmt_pressure_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str, nth:int = None):
     pmt = pmt_pressure_df["PMT"]
     p1 = pmt_pressure_df["P1"]
     timestamps = pmt_pressure_df['timestamps']
@@ -186,7 +186,7 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, folderName: 'str', matFileName:
     # ts_pmt, pmt_ds = slice_downsample(timestamps, pmt, nth)
     # ts_p1,  p1_ds  = slice_downsample(timestamps, p1,  nth)
 
-    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4),sharex=True)
+    fig, [ax1, ax2] = plt.subplots(2, 1, figsize=(11, 4))
     ax1.plot(timestamps,pmt,label='PMT')
     ax1.set_title("PMT vs Time")
     ax1.set_xlabel("Time")
@@ -202,13 +202,12 @@ def plot_pressure(pmt_pressure_df: pd.DataFrame, folderName: 'str', matFileName:
     ax2.legend()
 
     fig.tight_layout()
-    # ax2.set_xlim(ax1.get_xlim())
     picture_path = Path('pictures')
-    out_dir = picture_path / 'pressure' / folderName
+    out_dir = picture_path / 'Pressure' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
-    fig.savefig(out_path, dpi=300,bbox_inches='tight')
-    plt.close()
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
 
 def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_plot = False):
     cross_idx_pmt = np.where(pmt_pressure_df['PMT'] <= crossing_threshold)[0]
@@ -875,11 +874,10 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
                 "fft_a0_amp": a0,
             })
         elif do_Pressure:
-            print('Frequency candidate (log 1,2,3)')
-            flow_dataFrame = load_tdms_data(tdms)
+            print('Pressure candidate (log 1,2,3,4,5,6)')
             pmt_pressure_dataFrame = load_mat_data(mat)
             print('Plotting pressure')
-            plot_pressure()
+            plot_pressure(pmt_pressure_dataFrame, mat.stem, tdms.stem, mat.parent.name)
 
 
     # ------- Count and present unpaired files -------
@@ -921,7 +919,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(False, True)
+main(do_Pressure=True)
 
 # base_path = Path(r'data\01_09_D_120mm_260mm')
 # # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
