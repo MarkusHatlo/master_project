@@ -404,7 +404,7 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
     }
 
 def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
-    fig, [ax1,ax2] = plt.subplots(1, 1, figsize=(11, 3.5))
+    fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
     ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
     ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
     ax1.axvspan(
@@ -684,9 +684,9 @@ def calculate_fft(
     }
 
 def calculating_window(df, flow_df):
-        steady_state_air = flow_df['air_volum_flow'].iloc[:5].mean()
+        steady_state_air = flow_df['air_volum_flow'].iloc[:10].mean()
         print('steady_state_air', steady_state_air)
-        ramping_idx_air = np.where(flow_df['air_volum_flow'] > 1.0*steady_state_air)[0]
+        ramping_idx_air = np.where(flow_df['air_volum_flow'] > 1.02*steady_state_air)[0]
         i_ramping_air = int(ramping_idx_air[0])
         ramp_time = flow_df['Time'].iloc[i_ramping_air]
         start_idx_pmt = (df['timestamps'] - ramp_time).abs().idxmin()
@@ -835,6 +835,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             except Exception as e:
                 freq_fail += 1
                 print(f"Peak/frequency computation failed: {e}")
+                print(type(e))
                 continue
 
             print(f"Freq = {stats['freq_mean_Hz']:.3f} ± {stats['freq_std_Hz']:.3f} Hz "
