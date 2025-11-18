@@ -69,8 +69,6 @@ def make_height_colors(H_series, nan_color="0.5"):
         handles.append(Line2D([0], [0], lw=3, color=nan_color, label="H unknown"))
     return color_for_height, handles
 
-from matplotlib.lines import Line2D
-
 def marker_for_diameter(D):
     if pd.isna(D): 
         return "o"
@@ -700,8 +698,10 @@ def plot_freq_scatter(csv_path):
     freq_df["H_mm"] = [h for d, h in dims]
 
     # --- U from mat_file (Up_### in the .mat filename) ---
-    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
-    # freq_df["U"] = freq_df['U_blow_off_m_per_s']
+    if 'U_blow_off_m_per_s' in freq_df:
+        freq_df["U"] = freq_df['U_blow_off_m_per_s']
+    else:
+        freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
 
     # --- ER from file names ---
     er_from_tdms = freq_df["tdms_file"].astype(str).apply(extract_ER_from_name)
@@ -737,7 +737,7 @@ def plot_freq_scatter(csv_path):
     LBO_manual = False
     # --- Build 3×1 figure ---
     fig, (ax_u) = plt.subplots(
-        1, 1, figsize=(8, 8), sharex=False
+        1, 1, figsize=(7, 7), sharex=False
     )
 
     # 1) freq vs U
@@ -963,7 +963,10 @@ def plot_freq_vs_U_by_geom(csv_path):
     freq_df["H_mm"] = [h for d, h in dims]
 
     # --- U from mat_file (Up_### in the .mat filename) ---
-    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+    if 'U_blow_off_m_per_s' in freq_df:
+        freq_df["U"] = freq_df['U_blow_off_m_per_s']
+    else:
+        freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
 
     # --- Keep only rows with both U and frequency defined ---
     freq_df = freq_df.dropna(subset=["U", 'fft_f0_Hz'])
@@ -977,7 +980,7 @@ def plot_freq_vs_U_by_geom(csv_path):
         freq_df["D_mm"].dropna().astype(int).sort_values().unique()
     )
 
-    fig, ax = plt.subplots(figsize=(8, 8))
+    fig, ax = plt.subplots(figsize=(7, 7))
 
     # --- Plot one line per (D, H) combination ---
     for (D, H), sub in freq_df.groupby(["D_mm", "H_mm"]):
@@ -1000,7 +1003,7 @@ def plot_freq_vs_U_by_geom(csv_path):
         SuTong_vel,
         SuTong_freq,
         color="black",
-        linestyle="-",
+        linestyle="",
         marker="o",
         label="Su Tong"
     )
@@ -1036,7 +1039,7 @@ def plot_freq_vs_U_by_geom(csv_path):
         Line2D(
             [0], [0],
             marker="o",
-            linestyle="-",
+            linestyle="",
             color="black",
             label="Su Tong",
         )
@@ -1052,19 +1055,175 @@ def plot_freq_vs_U_by_geom(csv_path):
     # --- Axes / styling ---
     ax.set_xlabel("U [m/s]")
     ax.set_ylabel("FFT peak frequency [Hz]")
-    ax.set_title("FFT peak frequency vs Speed U (separated by geometry)")
+    ax.set_title("FFT peak frequency vs Velocity U")
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.show()
+
+def plot_mean_freq_vs_U_by_geom(
+    csv_path: str,
+    avg_csv_path: str = "freq_avg_by_folder_D_H_ER.csv",
+    force_recompute: bool = False,
+):
+    """
+    Plot *averaged* FFT peak frequency vs U, with one marker per
+    (folder, D_mm, H_mm, ER_guess).
+
+    Averaging logic:
+      - load_or_make_avg_freq() computes mean fft_f0_Hz and freq_mean_Hz
+        for each (folder, D_mm, H_mm, ER_guess)
+      - this function additionally computes mean U for the same groups
+      - result: each ER for a given geometry is represented by one point:
+          (U_mean, fft_f0_Hz_mean)
+
+    Color/marker scheme identical to plot_freq_vs_U_by_geom:
+      - color_for_height from make_height_colors
+      - markers from marker_for_diameter_local
+    """
+    # --- Load original frequency data to get U, ER_guess, dims ---
+    freq_df = pd.read_csv(csv_path).copy()
+
+    # Dimensions from folder
+    dims = freq_df["folder"].apply(extract_dims)  # returns (D_mm, H_mm)
+    freq_df["D_mm"] = [d for d, h in dims]
+    freq_df["H_mm"] = [h for d, h in dims]
+
+    # ER from tdms file name (same as in load_or_make_avg_freq)
+    freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
+
+    # U from mat file name
+    if 'U_blow_off_m_per_s' in freq_df:
+        freq_df["U"] = freq_df['U_blow_off_m_per_s']
+    else:
+        freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+
+    # Keep only rows with valid U, freq and ER
+    freq_df = freq_df.dropna(subset=["U", "fft_f0_Hz", "ER_guess", "D_mm", "H_mm"])
+
+    # --- Load (or build) the averaged frequencies over ER ---
+    avg_freq = load_or_make_avg_freq(
+        src_csv=csv_path,
+        avg_csv=avg_csv_path,
+        force_recompute=force_recompute,
+    )
+    # avg_freq has: folder, D_mm, H_mm, ER_guess, fft_f0_Hz, freq_mean_Hz, freq_diff_Hz
+
+    # --- Compute mean U for each (folder, D_mm, H_mm, ER_guess) ---
+    mean_U = (
+        freq_df
+        .groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+        .agg(U=("U", "mean"))
+    )
+
+    # --- Merge mean U into the averaged frequency table ---
+    merged = avg_freq.merge(
+        mean_U,
+        on=["folder", "D_mm", "H_mm", "ER_guess"],
+        how="inner",
+    ).dropna(subset=["U"])
+
+    # --- Colors and markers as before ---
+    color_for_height, height_handles = make_height_colors(merged["H_mm"])
+
+    diameters_present = (
+        merged["D_mm"]
+        .dropna()
+        .astype(int)
+        .sort_values()
+        .unique()
+    )
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    # --- Plot one averaged point per (D, H, ER) ---
+    for (D, H), sub in merged.groupby(["D_mm", "H_mm"]):
+        sub = sub.sort_values("U")
+        mk = marker_for_diameter_local(int(D))
+
+        ax.plot(
+            sub["U"].values,           # mean U per ER
+            sub["fft_f0_Hz"].values,   # mean FFT peak freq per ER
+            linestyle="",
+            marker=mk,
+            color=color_for_height(H),
+            alpha=0.9,
+        )
+
+    # --- Su Tong reference curve (unchanged) ---
+    SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
+    SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    ax.plot(
+        SuTong_vel,
+        SuTong_freq,
+        color="black",
+        linestyle="",
+        marker="o",
+        label="Su Tong",
+    )
+
+    # --- Legends ---
+    # Height legend from make_height_colors
+    leg1 = ax.legend(
+        handles=height_handles,
+        title="Height",
+        loc="upper left",
+        frameon=True,
+    )
+    ax.add_artist(leg1)
+
+    # Diameter markers legend
+    marker_handles = []
+    for dval in diameters_present:
+        mk = marker_for_diameter_local(dval)
+        marker_handles.append(
+            Line2D(
+                [0], [0],
+                marker=mk,
+                linestyle="",
+                color="0.2",
+                markersize=8,
+                label=f"D = {dval} mm",
+            )
+        )
+
+    # Add Su Tong symbol to the second legend
+    marker_handles.append(
+        Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="",
+            color="black",
+            label="Su Tong",
+        )
+    )
+
+    leg2 = ax.legend(
+        handles=marker_handles,
+        title="Diameter & Ref.",
+        loc="lower right",
+        frameon=True,
+    )
+
+    # --- Axes / styling ---
+    ax.set_xlabel("U [m/s]")
+    ax.set_ylabel("Mean FFT peak frequency [Hz]")
+    ax.set_title("Mean FFT peak frequency vs U (averaged by ER)")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
 
 # plot_LBO()
 
 #Bruk hvis du må merke stjernene på nytt
 # plot_freq_f0_and_a0('freq_results_log456_last.csv')
 
-# plot_freq_scatter('freq_results_log456_last.csv')
-plot_freq_vs_U_by_geom('freq_results_log456_last.csv')
+plot_freq_scatter('freq_results_last_10.02mean_with_ER_U.csv')
+plot_freq_vs_U_by_geom('freq_results_last_10.02mean_with_ER_U.csv',)
+plot_mean_freq_vs_U_by_geom('freq_results_last_10.02mean_with_ER_U.csv', force_recompute=True)
 
-# plot_freq_mean_vs_f0(src_csv='freq_results_log456_last.csv')
-# plot_freq_points_vs_f0('freq_results_log456_last.csv')
+plot_freq_mean_vs_f0(src_csv='freq_results_last_10.02mean_with_ER_U.csv')
+plot_freq_points_vs_f0('freq_results_last_10.02mean_with_ER_U.csv')
+

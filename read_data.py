@@ -494,13 +494,15 @@ def calculate_fft(
     total_N = len(x)
 
     if nperseg is None:
-        guess = max(256, total_N)
+        guess = max(256, total_N // 2)
         nperseg = min(guess, total_N)
 
     if nperseg > total_N:
         nperseg = total_N  # just in case
+    resolution = total_N/fft_fs
 
     print('nperseg',nperseg)
+    print('Frequency resolution', resolution)
     # step size from overlap
     step = int(nperseg * (1.0 - overlap))
     if step <= 0:
@@ -540,28 +542,28 @@ def calculate_fft(
 
             seg_amps.append(amp)
 
-        if not seg_amps:
-            # fallback: just do one FFT on the full signal if seg_len is too big
-            seg_len = len(x_arr)
-            w = signal.windows.hann(seg_len, sym=False)
-            coherent_gain = w.mean()
+        # if not seg_amps:
+        #     # fallback: just do one FFT on the full signal if seg_len is too big
+        #     seg_len = len(x_arr)
+        #     w = signal.windows.hann(seg_len, sym=False)
+        #     coherent_gain = w.mean()
 
-            seg_w = x_arr * w
-            fft_out = sfft.rfft(seg_w)
-            freqs = sfft.rfftfreq(seg_len, d=1/fs)
+        #     seg_w = x_arr * w
+        #     fft_out = sfft.rfft(seg_w)
+        #     freqs = sfft.rfftfreq(seg_len, d=1/fs)
 
-            amp = (2.0 / seg_len) * np.abs(fft_out)
-            amp[0] /= 2.0
-            if seg_len % 2 == 0:
-                amp[-1] /= 2.0
-            amp /= coherent_gain
+        #     amp = (2.0 / seg_len) * np.abs(fft_out)
+        #     amp[0] /= 2.0
+        #     if seg_len % 2 == 0:
+        #         amp[-1] /= 2.0
+        #     amp /= coherent_gain
 
-            seg_amps = [amp]
+        #     seg_amps = [amp]
 
-        seg_amps = np.vstack(seg_amps)
-        avg_amp = seg_amps.mean(axis=0)
+        # seg_amps = np.vstack(seg_amps)
+        # avg_amp = seg_amps.mean(axis=0)
 
-        return freqs, avg_amp, seg_amps
+        # return freqs, avg_amp, seg_amps
 
     # --- run the averaged FFT amplitude calc ---
     f_amp, avg_amp, _all_seg_amps = segmented_fft_average_amp(
@@ -680,7 +682,8 @@ def calculate_fft(
         "nperseg": int(nperseg),
         "overlap": float(overlap),
         "f0_Hz": float(f0),
-        "a0_amp" : float(a0)
+        "a0_amp" : float(a0),
+        "resolution" : float(resolution)
     }
 
 def calculating_window(df, flow_df):
@@ -846,6 +849,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
                 fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
                 f0 = fft_stats["f0_Hz"]
                 a0 = fft_stats["a0_amp"]
+                freq_resolution = fft_stats['resolution']
                 if f0 is None or (isinstance(f0, float) and np.isnan(f0)):
                     f0_print = float('nan')
                 else:
@@ -875,6 +879,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
                 "freq_MAD_Hz": stats["freq_MAD_Hz"],
                 "fft_f0_Hz": f0,
                 "fft_a0_amp": a0,
+                "freq_resolution": freq_resolution,
             })
         elif do_Pressure:
             print('Pressure candidate (log 1,2,3,4,5,6)')
@@ -922,7 +927,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(do_Freq_FFT=True)
+# main(do_Freq_FFT=True)
 
 # base_path = Path(r'data\01_09_D_120mm_260mm')
 # # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
@@ -934,13 +939,18 @@ main(do_Freq_FFT=True)
 # pmt_pressure_dataFrame = load_mat_data(mat)
 # fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
 
-# base_path = Path(r'data\28_08_D_100mm_260mm')
-# # tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
-# mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
+base_path = Path(r'data\28_08_D_100mm_260mm')
+tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
+mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
 
-# # flow_dataFrame = load_tdms_data(tdms)
-# pmt_pressure_dataFrame = load_mat_data(mat)
-# plot_pressure(pmt_pressure_dataFrame)
+flow_dataFrame = load_tdms_data(tdms)
+pmt_pressure_dataFrame = load_mat_data(mat)
+calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")
+
+
+# Kjør LBO, 1.02 og ingen windowing, ikke 1, null!
+# Kjør FFT på pressure
+# Kanskje sjekk hvordan segmented data ser ut

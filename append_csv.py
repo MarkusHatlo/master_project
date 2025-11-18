@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 DATA_ROOT = Path("data")  # <-- change if needed
 
-FREQ_CSV = Path("freq_results_LBO.csv")  # e.g. "freq_results_8_windows_with_peaks.csv"
+FREQ_CSV = Path("freq_results_last_10.02mean.csv")  
 
 crossing_threshold = 0
 
