@@ -220,9 +220,9 @@ marker_handles = [
 ]
 
 
-def plot_LBO():
+def plot_LBO(csv_name: str):
     # --- Load ---
-    df = pd.read_csv("post_process_data.csv")
+    df = pd.read_csv(csv_name)
 
     # Keep only Log 1-3 and rows with an estimated ER to group logs together
     df = df[df["log"].isin([1, 2, 3])].dropna(subset=["er_est"])
@@ -241,7 +241,7 @@ def plot_LBO():
     # plot_all()
     plot_split_by_D(avg, 88, True)
 
-def plot_freq_full():
+def plot_freq_full(csv_name: str):
     """
     Make a 3-row figure:
       (1) fft_f0_Hz vs ER
@@ -251,8 +251,8 @@ def plot_freq_full():
     One line per folder, colored by H_mm, marker by D_mm.
     """
 
-    # --- 1. Load frequency data from logs 4-6 ---
-    freq_df = pd.read_csv("freq_results.csv")
+    # --- 1. Load frequency data from ---
+    freq_df = pd.read_csv(csv_name)
 
     freq_df["ER_guess"] = freq_df["tdms_file"].apply(extract_ER_from_name)
 
@@ -602,7 +602,79 @@ def plot_freq_points_vs_f0(
     fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.98])
     plt.show()
     
-def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
+def plot_freq_f0_and_a0(csv_path):
+    """
+    Two-panel figure for logs 4–6 style CSVs:
+      (1) fft_f0_Hz vs ER
+      (2) fft_a0_amp vs ER
+
+    Lines: one per folder, color = H_mm, marker = D_mm.
+    """
+    # --- Load ---
+    df = pd.read_csv(csv_path)
+    required = {"folder", "mat_file", "tdms_file", "log_no", "fft_f0_Hz", "fft_a0_amp"}
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"CSV missing required columns: {missing}. Found: {list(df.columns)}")
+
+    # --- Parse ER, D, H ---
+    df["ER_guess"] = df["tdms_file"].astype(str).apply(extract_ER_from_name)
+    dims = df["folder"].astype(str).apply(extract_dims)
+    df["D_mm"] = [d for d, h in dims]
+    df["H_mm"] = [h for d, h in dims]
+
+    # drop rows without ER (nothing to plot on x)
+    df = df.dropna(subset=["ER_guess"])
+
+    # --- Average repeats at same (folder, D, H, ER) ---
+    avg = (df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
+             .agg(fft_f0_Hz=("fft_f0_Hz", "mean"),
+                  fft_a0_amp=("fft_a0_amp", "mean")))
+
+    if avg.empty:
+        raise ValueError("No rows left after parsing ER. Check file names for ER patterns (e.g. 'ERp_0.75').")
+
+    # --- Styling helpers ---
+    color_for_height, height_handles = make_height_colors(avg["H_mm"])
+    diameters_present = avg["D_mm"].dropna().astype(int).sort_values().unique()
+    marker_handles = [Line2D([0],[0], marker=marker_for_diameter_local(d),
+                             linestyle="", color="0.2", markersize=8, label=f"D = {d} mm")
+                      for d in diameters_present]
+    if avg["D_mm"].isna().any():
+        marker_handles.append(Line2D([0],[0], marker="o", linestyle="", color="0.2",
+                                     markersize=8, label="D unknown"))
+
+    # --- Figure ---
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(10, 8), sharex=True, constrained_layout=False)
+
+    def draw_panel(ax, ycol, ylabel, title):
+        for (folder, D, H), g in avg.groupby(["folder", "D_mm", "H_mm"]):
+            g = g.sort_values("ER_guess")
+            label = (f"D={int(D)}mm, H={int(H)}mm") if pd.notna(D) and pd.notna(H) else folder
+            ax.plot(g["ER_guess"], g[ycol], "-",
+                    marker=marker_for_diameter_local(D), markersize=5,
+                    color=color_for_height(H), label=label)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+
+    draw_panel(ax_top, "fft_f0_Hz",  "f₀ (FFT peak) [Hz]",  "Dominant frequency vs ER")
+    draw_panel(ax_bot, "fft_a0_amp", "a₀ amplitude [a.u.]", "Peak amplitude vs ER")
+    ax_bot.set_xlabel("Equivalence ratio [-]")
+    ax_bot.axhline(y=0.07,color='red')
+
+    # Legends
+    leg1 = fig.legend(handles=height_handles, title="Height (color)", fontsize=8,
+                      loc="lower left", bbox_to_anchor=(0.08, 0.0))
+    fig.legend(handles=marker_handles, title="Diameter (marker)", fontsize=8,
+               loc="lower right", bbox_to_anchor=(0.92, 0.0))
+    _ = leg1
+
+    fig.suptitle("Instability metrics vs Equivalence ratio")
+    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.95])
+    plt.show()
+
+def plot_freq_scatter(csv_path):
     """
     Make a 3-row figure:
 
@@ -628,8 +700,8 @@ def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
     freq_df["H_mm"] = [h for d, h in dims]
 
     # --- U from mat_file (Up_### in the .mat filename) ---
-    # freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
-    freq_df["U"] = freq_df['U_blow_off_m_per_s']
+    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+    # freq_df["U"] = freq_df['U_blow_off_m_per_s']
 
     # --- ER from file names ---
     er_from_tdms = freq_df["tdms_file"].astype(str).apply(extract_ER_from_name)
@@ -776,87 +848,223 @@ def plot_freq_scatter(csv_path="freq_results_LBO_with_ER_U.csv"):
     # fig.tight_layout(rect=[0, 0.02, 1, 0.96])
     plt.show()
 
-def plot_freq_f0_and_a0(csv_path="freq_results.csv"):
+
+def plot_freq_vs_U_by_geom5(csv_path):
     """
-    Two-panel figure for logs 4–6 style CSVs:
-      (1) fft_f0_Hz vs ER
-      (2) fft_a0_amp vs ER
-
-    Lines: one per folder, color = H_mm, marker = D_mm.
+    Plot FFT peak frequency vs U, with separate lines for each (D_mm, H_mm).
+    Colors encode H_mm, markers encode D_mm.
     """
-    # --- Load ---
-    df = pd.read_csv(csv_path)
-    required = {"folder", "mat_file", "tdms_file", "log_no", "fft_f0_Hz", "fft_a0_amp"}
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(f"CSV missing required columns: {missing}. Found: {list(df.columns)}")
+    # --- Load frequency data ---
+    freq_df = pd.read_csv(csv_path).copy()
 
-    # --- Parse ER, D, H ---
-    df["ER_guess"] = df["tdms_file"].astype(str).apply(extract_ER_from_name)
-    dims = df["folder"].astype(str).apply(extract_dims)
-    df["D_mm"] = [d for d, h in dims]
-    df["H_mm"] = [h for d, h in dims]
+    # --- Dimensions from folder name ---
+    dims = freq_df["folder"].apply(extract_dims)  # returns (D_mm, H_mm)
+    freq_df["D_mm"] = [d for d, h in dims]
+    freq_df["H_mm"] = [h for d, h in dims]
 
-    # drop rows without ER (nothing to plot on x)
-    df = df.dropna(subset=["ER_guess"])
+    # --- U from mat_file (Up_### in the .mat filename) ---
+    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
 
-    # --- Average repeats at same (folder, D, H, ER) ---
-    avg = (df.groupby(["folder", "D_mm", "H_mm", "ER_guess"], as_index=False)
-             .agg(fft_f0_Hz=("fft_f0_Hz", "mean"),
-                  fft_a0_amp=("fft_a0_amp", "mean")))
+    # --- Only rows with both U and ycol defined ---
+    freq_df = freq_df.dropna(subset=["U", 'fft_f0_Hz'])
 
-    if avg.empty:
-        raise ValueError("No rows left after parsing ER. Check file names for ER patterns (e.g. 'ERp_0.75').")
+    # === Encoding: color for height, marker for diameter ===
+    heights = np.sort(freq_df["H_mm"].unique())
+    diams   = np.sort(freq_df["D_mm"].unique())
 
-    # --- Styling helpers ---
-    color_for_height, height_handles = make_height_colors(avg["H_mm"])
-    diameters_present = avg["D_mm"].dropna().astype(int).sort_values().unique()
-    marker_handles = [Line2D([0],[0], marker=marker_for_diameter_local(d),
-                             linestyle="", color="0.2", markersize=8, label=f"D = {d} mm")
-                      for d in diameters_present]
-    if avg["D_mm"].isna().any():
-        marker_handles.append(Line2D([0],[0], marker="o", linestyle="", color="0.2",
-                                     markersize=8, label="D unknown"))
+    # Colors by height
+    cmap = plt.get_cmap("tab10" if len(heights) <= 10 else "tab20")
+    color_for_height = {
+        h: cmap(i % cmap.N) for i, h in enumerate(heights)
+    }
 
-    # --- Figure ---
-    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(10, 8), sharex=True, constrained_layout=False)
+    # Markers by diameter
+    marker_list = ["o", "s", "D", "^", "v", "P", "X", "*", ">", "<"]
+    marker_for_diam = {
+        d: marker_list[i % len(marker_list)] for i, d in enumerate(diams)
+    }
 
-    def draw_panel(ax, ycol, ylabel, title):
-        for (folder, D, H), g in avg.groupby(["folder", "D_mm", "H_mm"]):
-            g = g.sort_values("ER_guess")
-            label = (f"D={int(D)}mm, H={int(H)}mm") if pd.notna(D) and pd.notna(H) else folder
-            ax.plot(g["ER_guess"], g[ycol], "-",
-                    marker=marker_for_diameter_local(D), markersize=5,
-                    color=color_for_height(H), label=label)
-        ax.set_ylabel(ylabel)
-        ax.set_title(title)
-        ax.grid(True, alpha=0.3)
+    fig, ax = plt.subplots(figsize=(8, 8))
 
-    draw_panel(ax_top, "fft_f0_Hz",  "f₀ (FFT peak) [Hz]",  "Dominant frequency vs ER")
-    draw_panel(ax_bot, "fft_a0_amp", "a₀ amplitude [a.u.]", "Peak amplitude vs ER")
-    ax_bot.set_xlabel("Equivalence ratio [-]")
-    ax_bot.axhline(y=0.07,color='red')
+    # --- Plot data: one line per (D, H) ---
+    for (D, H), sub in freq_df.groupby(["D_mm", "H_mm"]):
+        sub = sub.sort_values("U")
+        ax.plot(
+            sub["U"].values,
+            sub['fft_f0_Hz'].values,
+            linestyle="-",
+            marker=marker_for_diam[D],
+            color=color_for_height[H],
+            alpha=0.9,
+            label=f"D = {D} mm, H = {H} mm",
+        )
 
-    # Legends
-    leg1 = fig.legend(handles=height_handles, title="Height (color)", fontsize=8,
-                      loc="lower left", bbox_to_anchor=(0.08, 0.0))
-    fig.legend(handles=marker_handles, title="Diameter (marker)", fontsize=8,
-               loc="lower right", bbox_to_anchor=(0.92, 0.0))
-    _ = leg1
+    # --- Su Tong reference curve ---
+    SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
+    SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    ax.plot(
+        SuTong_vel,
+        SuTong_freq,
+        color="black",
+        linestyle="-",
+        marker="o",
+        label="Su Tong"
+    )
 
-    fig.suptitle("Instability metrics vs Equivalence ratio")
-    fig.tight_layout(rect=[0.02, 0.08, 0.98, 0.95])
+    # --- Legends in the "separated" style (color = H, marker = D) ---
+    height_handles = [
+        Line2D([0], [0], color=color_for_height[h], lw=3, label=f"H = {h} mm")
+        for h in heights
+    ]
+    marker_handles = [
+        Line2D([0], [0], marker=marker_for_diam[d], linestyle="", color="0.2",
+               markersize=8, label=f"D = {d} mm")
+        for d in diams
+    ]
+
+    leg1 = ax.legend(
+        handles=height_handles,
+        title="Height",
+        loc="upper left",
+        frameon=True
+    )
+    ax.add_artist(leg1)
+
+    leg2 = ax.legend(
+        handles=marker_handles + [Line2D([0],[0], color="black", marker="o",
+                                         label="Su Tong")],
+        title="Diameter & Ref.",
+        loc="lower right",
+        frameon=True
+    )
+
+    # --- Axes formatting ---
+    ax.set_xlabel("U [m/s]")
+    ax.set_ylabel("FFT peak frequency [Hz]")
+    ax.set_title("FFT peak frequency vs Speed U (separated by geometry)")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
     plt.show()
 
+def plot_freq_vs_U_by_geom(csv_path):
+    """
+    Plot FFT peak frequency vs U, with lines separated by (D_mm, H_mm),
+    using the same color + marker system as before:
+      - color_for_height from make_height_colors
+      - markers from marker_for_diameter_local
+    """
+    # --- Load frequency data ---
+    freq_df = pd.read_csv(csv_path).copy()
 
+    # --- Dimensions from folder name ---
+    dims = freq_df["folder"].apply(extract_dims)  # returns (D_mm, H_mm)
+    freq_df["D_mm"] = [d for d, h in dims]
+    freq_df["H_mm"] = [h for d, h in dims]
 
+    # --- U from mat_file (Up_### in the .mat filename) ---
+    freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
+
+    # --- Keep only rows with both U and frequency defined ---
+    freq_df = freq_df.dropna(subset=["U", 'fft_f0_Hz'])
+
+    # --- Colors: same system as before ---
+    # This gives you: dict H_mm -> color, and legend handles for heights
+    color_for_height, height_handles = make_height_colors(freq_df["H_mm"])
+
+    # --- Markers: same system as before ---
+    diameters_present = (
+        freq_df["D_mm"].dropna().astype(int).sort_values().unique()
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # --- Plot one line per (D, H) combination ---
+    for (D, H), sub in freq_df.groupby(["D_mm", "H_mm"]):
+        sub = sub.sort_values("U")
+        mk = marker_for_diameter_local(int(D))   # same helper as before
+
+        ax.plot(
+            sub["U"].values,
+            sub['fft_f0_Hz'].values,
+            linestyle="",
+            marker=mk,
+            color=color_for_height(H),
+            alpha=0.9,
+        )
+
+    # --- Su Tong reference curve ---
+    SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
+    SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    ax.plot(
+        SuTong_vel,
+        SuTong_freq,
+        color="black",
+        linestyle="-",
+        marker="o",
+        label="Su Tong"
+    )
+
+    # --- Legends: reuse the same style you already have ---
+
+    # Height legend is already prepared by make_height_colors
+    leg1 = ax.legend(
+        handles=height_handles,
+        title="Height",
+        loc="upper left",
+        frameon=True,
+    )
+    ax.add_artist(leg1)
+
+    # Diameter markers legend: same pattern you showed
+    marker_handles = []
+    for dval in diameters_present:
+        mk = marker_for_diameter_local(dval)
+        marker_handles.append(
+            Line2D(
+                [0], [0],
+                marker=mk,
+                linestyle="",
+                color="0.2",
+                markersize=8,
+                label=f"D = {dval} mm",
+            )
+        )
+
+    # Add Su Tong symbol to the second legend
+    marker_handles.append(
+        Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="-",
+            color="black",
+            label="Su Tong",
+        )
+    )
+
+    leg2 = ax.legend(
+        handles=marker_handles,
+        title="Diameter & Ref.",
+        loc="lower right",
+        frameon=True,
+    )
+
+    # --- Axes / styling ---
+    ax.set_xlabel("U [m/s]")
+    ax.set_ylabel("FFT peak frequency [Hz]")
+    ax.set_title("FFT peak frequency vs Speed U (separated by geometry)")
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
 
 # plot_LBO()
 
-plot_freq_full()
-plot_freq_scatter()
+#Bruk hvis du må merke stjernene på nytt
+# plot_freq_f0_and_a0('freq_results_log456_last.csv')
 
-# plot_freq_f0_and_a0()
+# plot_freq_scatter('freq_results_log456_last.csv')
+plot_freq_vs_U_by_geom('freq_results_log456_last.csv')
 
 # plot_freq_mean_vs_f0(src_csv='freq_results_log456_last.csv')
 # plot_freq_points_vs_f0('freq_results_log456_last.csv')
