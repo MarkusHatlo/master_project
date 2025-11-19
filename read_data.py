@@ -405,7 +405,7 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
 
 def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
     fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
-    ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['PMT'], label='PMT', linewidth=1)
+    ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['P1'], label='PMT', linewidth=1)
     ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
     ax1.axvspan(
         pmt_pressure_df['timestamps'].iloc[window_start],
@@ -428,7 +428,7 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_d
     fig.tight_layout()
 
     picture_path = Path('pictures')
-    out_dir = picture_path / 'long_time_6_windows_retry' / folderName
+    out_dir = picture_path / 'pressure_FFT' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -675,7 +675,7 @@ def calculate_fft(
 
     # --- save figure ---
     picture_path = Path('pictures')
-    out_dir = picture_path / 'long_time_6_windows_retry' / folderName
+    out_dir = picture_path / 'pressure_FFT' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -820,10 +820,10 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             if log_no in {1,2,3}:
                 print('Defining calculation windows')
                 window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
-                pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
+                pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop].to_numpy(float)
                 time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
             else:
-                pmt_window   = pmt_pressure_dataFrame['PMT']
+                pmt_window   = pmt_pressure_dataFrame['P1']
                 time_window  = pmt_pressure_dataFrame['timestamps']
                 window_start = 0
                 window_stop = 0
