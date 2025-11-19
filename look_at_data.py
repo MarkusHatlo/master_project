@@ -67,8 +67,8 @@ def load_tdms_data(tdms_path: Path):
         return flow_df
 
 
-def detect_pmt_peaks(x, ts, col='PMT',
-                     smooth_ms=10,         # small smoothing for noise
+def look_at_pmt_data(x, ts, col='PMT',
+                     smooth_ms=100,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
@@ -85,6 +85,10 @@ def detect_pmt_peaks(x, ts, col='PMT',
     w = signal.windows.hann(len(y), sym=False)
     seg_y = y*w
 
+    
+    w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
+    y_smooth = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
+
     fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
 
     ax1.plot(x,color='black')
@@ -93,7 +97,7 @@ def detect_pmt_peaks(x, ts, col='PMT',
     ax2.plot(y,color='blue')
     ax2.axhline(0)
 
-    ax3.plot(seg_y)
+    ax3.plot(y_smooth)
     plt.show()
 
 crossing_threshold = 0
@@ -148,6 +152,6 @@ time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_sto
 # time_window  = pmt_pressure_dataFrame['timestamps']
 
 print('Detecting peaks')
-peaks = detect_pmt_peaks(pmt_window, time_window)
+peaks = look_at_pmt_data(pmt_window, time_window)
 # print('Checking freq resolution')
 # check_freq_resolution(pmt_window,time_window)

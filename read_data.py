@@ -286,8 +286,8 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     # ax.set_ylabel('Velocity [m/s]')
     # plt.show()
 
-def detect_pmt_peaks(x, ts, col='PMT',
-                     smooth_ms=10,         # small smoothing for noise
+def detect_pmt_peaks(x, ts,
+                     smooth_ms=100,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
@@ -428,7 +428,7 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_d
     fig.tight_layout()
 
     picture_path = Path('pictures')
-    out_dir = picture_path / 'LBO_last_version' / folderName
+    out_dir = picture_path / 'long_time_6_windows_retry' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -443,7 +443,6 @@ def calculate_fft(
     tdmsFileName: str,
     folderName: str,
     lowpass_cutoff: float = None,
-    nperseg: int = None,
     overlap: float = 0.5,
     stop_after_s: float | None = None
 ):
@@ -493,13 +492,9 @@ def calculate_fft(
     # --- choose segment length for FFT averaging ---
     total_N = len(x)
 
-    if nperseg is None:
-        guess = max(256, total_N // 2)
-        nperseg = min(guess, total_N)
+    nperseg = total_N // 6
 
-    if nperseg > total_N:
-        nperseg = total_N  # just in case
-    resolution = total_N/fft_fs
+    resolution = fft_fs/nperseg
 
     print('nperseg',nperseg)
     print('Frequency resolution', resolution)
@@ -513,8 +508,12 @@ def calculate_fft(
         """
         Returns freqs [Hz], avg_amp [same units as x], and also the stack of amps.
         """
-        w = signal.windows.hann(seg_len, sym=False)
-        coherent_gain = w.mean()
+        # w = signal.windows.hann(seg_len, sym=False)
+        # coherent_gain = w.mean()
+
+        # No Hann window: use rectangular window
+        w = np.ones(seg_len)
+        coherent_gain = 1.0
 
         seg_amps = []
         for start in range(0, len(x_arr) - seg_len + 1, step_samples):
@@ -543,6 +542,11 @@ def calculate_fft(
             seg_amps.append(amp)
 
         # if not seg_amps:
+        #     # nothing to average; raise a clear error instead of returning None
+        #     raise ValueError(
+        #         f"No segments were formed: len(x_arr)={len(x_arr)}, "
+        #         f"seg_len={seg_len}, step_samples={step_samples}"
+        #     )
         #     # fallback: just do one FFT on the full signal if seg_len is too big
         #     seg_len = len(x_arr)
         #     w = signal.windows.hann(seg_len, sym=False)
@@ -560,10 +564,10 @@ def calculate_fft(
 
         #     seg_amps = [amp]
 
-        # seg_amps = np.vstack(seg_amps)
-        # avg_amp = seg_amps.mean(axis=0)
+        seg_amps = np.vstack(seg_amps)
+        avg_amp = seg_amps.mean(axis=0)
 
-        # return freqs, avg_amp, seg_amps
+        return freqs, avg_amp, seg_amps
 
     # --- run the averaged FFT amplitude calc ---
     f_amp, avg_amp, _all_seg_amps = segmented_fft_average_amp(
@@ -630,9 +634,9 @@ def calculate_fft(
     ax1.grid(True, linestyle="--", alpha=0.3)
 
     # 2) averaged amplitude FFT
-    ax2.plot(f_amp, avg_amp, label='Segment-averaged FFT (Hann, 50% overlap)')
+    ax2.plot(f_amp, avg_amp, label='FFT')
     ax2.set_xlim(0, 10)
-    title = 'Averaged FFT amplitude (Hann-windowed segments)'
+    title = 'FFT amplitude'
     if lowpass_cutoff is not None:
         title += f' | lowpass {lowpass_cutoff} Hz (time trace only)'
         ax2.axvline(lowpass_cutoff, color='r', linestyle='--', alpha=0.7, label='Lowpass cutoff')
@@ -671,7 +675,7 @@ def calculate_fft(
 
     # --- save figure ---
     picture_path = Path('pictures')
-    out_dir = picture_path / 'LBO_last_version' / folderName
+    out_dir = picture_path / 'long_time_6_windows_retry' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -809,8 +813,8 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             })
 
         # ------- Frequency path: logs 4,5,6 -------
-        elif do_Freq_FFT and log_no in {1,2,3}:
-            print('Frequency candidate (log 1,2,3)')
+        elif do_Freq_FFT and log_no in {4,5,6}:
+            print('Frequency candidate (log 4,5,6)')
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
             if log_no in {1,2,3}:
@@ -927,7 +931,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-# main(do_Freq_FFT=True)
+main(do_Freq_FFT=True)
 
 # base_path = Path(r'data\01_09_D_120mm_260mm')
 # # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
@@ -939,13 +943,13 @@ start = time.time()
 # pmt_pressure_dataFrame = load_mat_data(mat)
 # fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
 
-base_path = Path(r'data\28_08_D_100mm_260mm')
-tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
-mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
+# base_path = Path(r'data\28_08_D_100mm_260mm')
+# tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
+# mat  = base_path / 'LBO_Sweep_1_10_37_19.mat'
 
-flow_dataFrame = load_tdms_data(tdms)
-pmt_pressure_dataFrame = load_mat_data(mat)
-calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
+# flow_dataFrame = load_tdms_data(tdms)
+# pmt_pressure_dataFrame = load_mat_data(mat)
+# calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")

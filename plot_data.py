@@ -1220,10 +1220,10 @@ def plot_mean_freq_vs_U_by_geom(
 #Bruk hvis du må merke stjernene på nytt
 # plot_freq_f0_and_a0('freq_results_log456_last.csv')
 
-plot_freq_scatter('freq_results_last_10.02mean_with_ER_U.csv')
-plot_freq_vs_U_by_geom('freq_results_last_10.02mean_with_ER_U.csv',)
-plot_mean_freq_vs_U_by_geom('freq_results_last_10.02mean_with_ER_U.csv', force_recompute=True)
+plot_freq_scatter('freq_results_first_with_new_fft.csv')
+plot_freq_vs_U_by_geom('freq_results_first_with_new_fft.csv',)
+plot_mean_freq_vs_U_by_geom('freq_results_first_with_new_fft.csv', force_recompute=True)
 
-plot_freq_mean_vs_f0(src_csv='freq_results_last_10.02mean_with_ER_U.csv')
-plot_freq_points_vs_f0('freq_results_last_10.02mean_with_ER_U.csv')
+plot_freq_mean_vs_f0(src_csv='freq_results_first_with_new_fft.csv')
+plot_freq_points_vs_f0('freq_results_first_with_new_fft.csv')
 
