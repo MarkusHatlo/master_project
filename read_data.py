@@ -508,12 +508,12 @@ def calculate_fft(
         """
         Returns freqs [Hz], avg_amp [same units as x], and also the stack of amps.
         """
-        # w = signal.windows.hann(seg_len, sym=False)
-        # coherent_gain = w.mean()
+        w = signal.windows.hann(seg_len, sym=False)
+        coherent_gain = w.mean()
 
-        # No Hann window: use rectangular window
-        w = np.ones(seg_len)
-        coherent_gain = 1.0
+        # # No Hann window: use rectangular window
+        # w = np.ones(seg_len)
+        # coherent_gain = 1.0
 
         seg_amps = []
         for start in range(0, len(x_arr) - seg_len + 1, step_samples):
