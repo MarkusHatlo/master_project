@@ -407,14 +407,14 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_d
     fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
     ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['P1'], label='PMT', linewidth=1)
     ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
-    ax1.axvspan(
-        pmt_pressure_df['timestamps'].iloc[window_start],
-        pmt_pressure_df['timestamps'].iloc[window_stop-1],
-        color='grey',
-        alpha=0.2)
-    ax1.set_title("PMT vs Time (with peaks)")
+    # ax1.axvspan(
+    #     pmt_pressure_df['timestamps'].iloc[window_start],
+    #     pmt_pressure_df['timestamps'].iloc[window_stop-1],
+    #     color='grey',
+    #     alpha=0.2)
+    ax1.set_title("P1 vs Time (with peaks)")
     ax1.set_xlabel("Time")
-    ax1.set_ylabel("PMT")
+    ax1.set_ylabel("P1")
     ax1.grid(True, which="both", linestyle="--", alpha=0.4)
     ax1.legend()
     plt.tight_layout()
@@ -626,8 +626,8 @@ def calculate_fft(
     ax1.plot(t, x, label='Raw (DC removed)')
     if filtered_signal is not None:
         ax1.plot(t, filtered_signal, label='Lowpass', linewidth=1.5)
-    ax1.set_title('PMT data')
-    ax1.set_ylabel('PMT signal')
+    ax1.set_title('P1 data')
+    ax1.set_ylabel('P1 signal')
     ax1.set_xlabel('Time')
     if filtered_signal is not None:
         ax1.legend(fontsize=8)
