@@ -120,38 +120,38 @@ def check_freq_resolution(input_signal, input_time):
     total_N = len(input_signal)
     d = input_time.diff().dt.total_seconds().median()
     fft_fs = 1.0 / d  # Hz
-    resolution = fft_fs/total_N
+    resolution = fft_fs/(total_N // 6)
     print('The total number of points, N:', total_N)
     print('Sampling frequency:', fft_fs)
     print('The resolution is:', resolution)
 
-    fig, ax1 = plt.subplots(1,1)
-    ax1.plot(input_time, input_signal, label='Raw (DC removed)')
-    ax1.set_title('PMT data')
-    ax1.set_ylabel('PMT signal')
-    ax1.set_xlabel('Time')
-    ax1.grid(True, linestyle="--", alpha=0.3)
-    plt.show()
+    # fig, ax1 = plt.subplots(1,1)
+    # ax1.plot(input_time, input_signal, label='Raw (DC removed)')
+    # ax1.set_title('PMT data')
+    # ax1.set_ylabel('PMT signal')
+    # ax1.set_xlabel('Time')
+    # ax1.grid(True, linestyle="--", alpha=0.3)
+    # plt.show()
 
 
 base_path = Path(r'data\03_09_D_88mm_350mm')
-mat  = base_path / 'LBO_Sweep_1_8_39_29.mat'
-tdms = base_path / "ER1_0,65_Log1_03.09.2025_08.39.27.tdms"
+mat  = base_path / 'Up_7_ERp_0.6_PH2p_0_11_24_6.mat'
+tdms = base_path / "ER1_0,6_Log6_03.09.2025_11.24.02.tdms"
 
 print('Making the dataframes')
 pmt_pressure_dataFrame = load_mat_data(mat)
 flow_dataFrame = load_tdms_data(tdms)
 
 
-print('Defining calculation windows')
-window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
-pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
-time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
+# print('Defining calculation windows')
+# window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
+# pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
+# time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
 
-# pmt_window   = pmt_pressure_dataFrame['PMT']
-# time_window  = pmt_pressure_dataFrame['timestamps']
+pmt_window   = pmt_pressure_dataFrame['PMT']
+time_window  = pmt_pressure_dataFrame['timestamps']
 
-print('Detecting peaks')
-peaks = look_at_pmt_data(pmt_window, time_window)
-# print('Checking freq resolution')
-# check_freq_resolution(pmt_window,time_window)
+# print('Detecting peaks')
+# peaks = look_at_pmt_data(pmt_window, time_window)
+print('Checking freq resolution')
+check_freq_resolution(pmt_window,time_window)
