@@ -15,6 +15,114 @@ from pathlib import Path
 from nptdms import TdmsFile
 from collections import defaultdict
 
+def _secs_since_midnight(h: int, m: int, s: int) -> int:
+    return h*3600 + m*60 + s
+
+_mat_time_re = re.compile(r'_(\d{1,2})_(\d{1,2})_(\d{1,2})\.mat$', re.IGNORECASE)
+def parse_mat_time_seconds(name: str) -> int | None:
+    """
+    Extract HH_MM_SS from MAT names like ..._11_24_6.mat → 11:24:06.
+    Returns seconds since midnight, or None if not matched.
+    """
+    m = _mat_time_re.search(name)
+    if not m:
+        return None
+    h, mi, s = map(int, m.groups())
+    return _secs_since_midnight(h, mi, s)
+
+_tdms_time_re = re.compile(r'_(\d{2}\.\d{2}\.\d{4})_(\d{2})\.(\d{2})\.(\d{2})\.tdms$',  # ..._DD.MM.YYYY_HH.MM.SS.tdms
+    re.IGNORECASE)
+def parse_tdms_time_seconds(name: str) -> int | None:
+    """
+    Extract time from TDMS names like ..._03.09.2025_11.24.02.tdms → 11:24:02.
+    Returns seconds since midnight, or None if not matched.
+    """
+    m = _tdms_time_re.search(name)
+    if not m:
+        return None
+    _, hh, mm, ss = m.groups()
+    return _secs_since_midnight(int(hh), int(mm), int(ss))
+
+def iter_data_files(base_path: Path, include_subfolders=False):
+    """
+    Yields every .tdms and .mat file under base_path.
+    Set include_subfolders=True to recurse into subfolders.
+    """
+    base = Path(base_path)
+    patterns = ("*.tdms", "*.mat")
+
+    # Choose globber based on recursion
+    globber = base.rglob if include_subfolders else base.glob
+
+    # Use a set to avoid duplicates, then sort for stable order
+    files = {
+        p.resolve()
+        for pat in patterns
+        for p in globber(pat)
+        if p.is_file()
+    }
+    # Sort by extension then name (case-insensitive)
+    return sorted(files, key=lambda p: (p.suffix.lower(), p.name.lower()))
+
+def pair_mat_tdms(files: List[Path], *, tolerance_seconds=20, group_by_dir=True):
+    """
+    Pair .mat with the closest-in-time .tdms, within tolerance.
+    If group_by_dir=True, only pair files that share the same parent directory.
+    Returns (pairs, unmatched_mats, unmatched_tdms).
+    """
+    # Group files by directory if requested, else put all in one bucket
+    buckets = defaultdict(list)
+    for p in files:
+        key = p.parent if group_by_dir else "_all_"
+        buckets[key].append(p)
+
+    all_pairs = []
+    all_unmatched_mats = []
+    all_unmatched_tdms = []
+
+    for key, bucket in buckets.items():
+        mats = []
+        tdms = []
+
+        for p in bucket:
+            if p.suffix.lower() == ".mat":
+                t = parse_mat_time_seconds(p.name)
+                if t is not None:
+                    mats.append((p, t))
+            elif p.suffix.lower() == ".tdms":
+                t = parse_tdms_time_seconds(p.name)
+                if t is not None:
+                    tdms.append((p, t))
+
+        # Sort by time to make greedy matching stable
+        mats.sort(key=lambda x: x[1])
+        tdms.sort(key=lambda x: x[1])
+
+        used_mat = set()
+        used_tdms = set()
+
+        # Greedy: for each tdms, pick the nearest unused mat within tolerance
+        for j, (tdms_path, t_tdms) in enumerate(tdms):
+            best_i = None
+            best_diff = None
+            for i, (mat_path, t_mat) in enumerate(mats):
+                if i in used_mat:
+                    continue
+                diff = abs(t_mat - t_tdms)
+                if best_diff is None or diff < best_diff:
+                    best_diff = diff
+                    best_i = i
+            if best_i is not None and best_diff is not None and best_diff <= tolerance_seconds:
+                used_tdms.add(j)
+                used_mat.add(best_i)
+                all_pairs.append((mats[best_i][0], tdms_path))  # (mat, tdms)
+
+        # Collect unmatched
+        all_unmatched_mats.extend(m for k, (m, _) in enumerate(mats) if k not in used_mat)
+        all_unmatched_tdms.extend(t for k, (t, _) in enumerate(tdms) if k not in used_tdms)
+
+    return all_pairs, all_unmatched_mats, all_unmatched_tdms
+
 def load_mat_data(mat_path: Path):
     #load the mat data
 
@@ -66,8 +174,7 @@ def load_tdms_data(tdms_path: Path):
 
         return flow_df
 
-
-def look_at_pmt_data(x, ts, col='PMT',
+def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str,
                      smooth_ms=100,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
@@ -98,7 +205,15 @@ def look_at_pmt_data(x, ts, col='PMT',
     ax2.axhline(0)
 
     ax3.plot(y_smooth)
-    plt.show()
+    plt.tight_layout()
+
+    # --- save figure ---
+    picture_path = Path('pictures')
+    out_dir = picture_path / 'only_the_pmt' / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
 
 crossing_threshold = 0
 def calculating_window(df, flow_df):
@@ -133,14 +248,15 @@ def check_freq_resolution(input_signal, input_time):
     # ax1.grid(True, linestyle="--", alpha=0.3)
     # plt.show()
 
+# Single data
+# ------------------------------------------------------------------------------------------------------
+# base_path = Path(r'data\03_09_D_88mm_350mm')
+# mat  = base_path / 'Up_7_ERp_0.6_PH2p_0_11_24_6.mat'
+# tdms = base_path / "ER1_0,6_Log6_03.09.2025_11.24.02.tdms"
 
-base_path = Path(r'data\03_09_D_88mm_350mm')
-mat  = base_path / 'Up_7_ERp_0.6_PH2p_0_11_24_6.mat'
-tdms = base_path / "ER1_0,6_Log6_03.09.2025_11.24.02.tdms"
-
-print('Making the dataframes')
-pmt_pressure_dataFrame = load_mat_data(mat)
-flow_dataFrame = load_tdms_data(tdms)
+# print('Making the dataframes')
+# pmt_pressure_dataFrame = load_mat_data(mat)
+# flow_dataFrame = load_tdms_data(tdms)
 
 
 # print('Defining calculation windows')
@@ -148,10 +264,36 @@ flow_dataFrame = load_tdms_data(tdms)
 # pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
 # time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
 
-pmt_window   = pmt_pressure_dataFrame['PMT']
-time_window  = pmt_pressure_dataFrame['timestamps']
+# pmt_window   = pmt_pressure_dataFrame['PMT']
+# time_window  = pmt_pressure_dataFrame['timestamps']
 
 # print('Detecting peaks')
 # peaks = look_at_pmt_data(pmt_window, time_window)
-print('Checking freq resolution')
-check_freq_resolution(pmt_window,time_window)
+# print('Checking freq resolution')
+# check_freq_resolution(pmt_window,time_window)
+# ------------------------------------------------------------------------------------------------------
+
+# Loop
+base_path = Path('data')
+files = iter_data_files(base_path, True)
+
+#Find the pairs in the code
+pairs, um_mats, um_tdms = pair_mat_tdms(
+    files,
+    tolerance_seconds=55,   # tweak if needed
+    group_by_dir=True
+)
+total_files = len(pairs)
+
+for file_idx, (mat, tdms) in enumerate(pairs):
+    print(f'Files processed {file_idx+1}/{total_files}')
+    print("PAIR:", mat.name, "<->", tdms.name)
+
+    flow_dataFrame = load_tdms_data(tdms)
+    pmt_pressure_dataFrame = load_mat_data(mat)
+
+    pmt_window   = pmt_pressure_dataFrame['PMT']
+    time_window  = pmt_pressure_dataFrame['timestamps']
+
+    print('Detecting peaks')
+    peaks = look_at_pmt_data(pmt_window, time_window)

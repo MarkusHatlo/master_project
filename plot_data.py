@@ -1220,11 +1220,11 @@ def plot_mean_freq_vs_U_by_geom(
 #Bruk hvis du må merke stjernene på nytt
 # plot_freq_f0_and_a0('freq_results_log456_last.csv')
 
-csv_path = 'freq_results_pressure_fft.csv'
+csv_path = 'freq_results_2nd_try_2_windows_with_ER_U.csv'
 # plot_freq_scatter(csv_path)
-plot_freq_vs_U_by_geom(csv_path,)
-plot_mean_freq_vs_U_by_geom(csv_path, force_recompute=True)
+plot_freq_vs_U_by_geom(csv_path)
+# plot_mean_freq_vs_U_by_geom(csv_path, force_recompute=True)
 
 plot_freq_mean_vs_f0(src_csv=csv_path)
-plot_freq_points_vs_f0(csv_path)
+# plot_freq_points_vs_f0(csv_path)
 
