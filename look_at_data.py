@@ -196,24 +196,33 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
     y_smooth = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
 
-    fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
+    # fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
+    fig, (ax1) = plt.subplots(1, 1, figsize=(7,7))
+
 
     ax1.plot(x,color='black')
-    ax1.plot(baseline,color='red')
+    # ax1.plot(baseline,color='red')
+    ax1.set_xlim(int(9.7e5),int(1e6))
 
-    ax2.plot(y,color='blue')
-    ax2.axhline(0)
+    x_dot = [9.845e5,9.83e5,9.88e5,9.8e5,9.896e5]
+    y_dot = [3,1.5,1.5,0.51,0.6]
+    ax1.plot(x_dot, y_dot, 'o', color='red')
 
-    ax3.plot(y_smooth)
+    # ax2.plot(y,color='blue')
+    # ax2.axhline(0)
+
+    # ax3.plot(y_smooth)
+
     plt.tight_layout()
+    plt.show()
 
-    # --- save figure ---
-    picture_path = Path('pictures')
-    out_dir = picture_path / 'only_the_pmt' / folderName
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
-    fig.savefig(out_path, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+    # # --- save figure ---
+    # picture_path = Path('pictures')
+    # out_dir = picture_path / 'only_the_pmt' / folderName
+    # out_dir.mkdir(parents=True, exist_ok=True)
+    # out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    # fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    # plt.close(fig)
 
 crossing_threshold = 0
 def calculating_window(df, flow_df):
@@ -250,12 +259,15 @@ def check_freq_resolution(input_signal, input_time):
 
 # Single data
 # ------------------------------------------------------------------------------------------------------
-# base_path = Path(r'data\03_09_D_88mm_350mm')
+base_path = Path(r'only_good_data\29_08_D_88mm_260mm')
 # mat  = base_path / 'Up_7_ERp_0.6_PH2p_0_11_24_6.mat'
 # tdms = base_path / "ER1_0,6_Log6_03.09.2025_11.24.02.tdms"
 
-# print('Making the dataframes')
-# pmt_pressure_dataFrame = load_mat_data(mat)
+tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19.tdms'
+mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22.mat'
+
+print('Making the dataframes')
+pmt_pressure_dataFrame = load_mat_data(mat)
 # flow_dataFrame = load_tdms_data(tdms)
 
 
@@ -264,36 +276,37 @@ def check_freq_resolution(input_signal, input_time):
 # pmt_window   = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop].to_numpy(float)
 # time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
 
-# pmt_window   = pmt_pressure_dataFrame['PMT']
-# time_window  = pmt_pressure_dataFrame['timestamps']
+pmt_window   = pmt_pressure_dataFrame['PMT']
+time_window  = pmt_pressure_dataFrame['timestamps']
 
 # print('Detecting peaks')
 # peaks = look_at_pmt_data(pmt_window, time_window)
 # print('Checking freq resolution')
 # check_freq_resolution(pmt_window,time_window)
+peaks = look_at_pmt_data(pmt_window, time_window, mat.stem, tdms.stem, mat.parent.name)
 # ------------------------------------------------------------------------------------------------------
 
-# Loop
-base_path = Path('data')
-files = iter_data_files(base_path, True)
+# # Loop
+# base_path = Path('only_good_data')
+# files = iter_data_files(base_path, True)
 
-#Find the pairs in the code
-pairs, um_mats, um_tdms = pair_mat_tdms(
-    files,
-    tolerance_seconds=55,   # tweak if needed
-    group_by_dir=True
-)
-total_files = len(pairs)
+# #Find the pairs in the code
+# pairs, um_mats, um_tdms = pair_mat_tdms(
+#     files,
+#     tolerance_seconds=55,   # tweak if needed
+#     group_by_dir=True
+# )
+# total_files = len(pairs)
 
-for file_idx, (mat, tdms) in enumerate(pairs):
-    print(f'Files processed {file_idx+1}/{total_files}')
-    print("PAIR:", mat.name, "<->", tdms.name)
+# for file_idx, (mat, tdms) in enumerate(pairs):
+#     print(f'Files processed {file_idx+1}/{total_files}')
+#     print("PAIR:", mat.name, "<->", tdms.name)
 
-    flow_dataFrame = load_tdms_data(tdms)
-    pmt_pressure_dataFrame = load_mat_data(mat)
+#     flow_dataFrame = load_tdms_data(tdms)
+#     pmt_pressure_dataFrame = load_mat_data(mat)
 
-    pmt_window   = pmt_pressure_dataFrame['PMT']
-    time_window  = pmt_pressure_dataFrame['timestamps']
+#     pmt_window   = pmt_pressure_dataFrame['PMT']
+#     time_window  = pmt_pressure_dataFrame['timestamps']
 
-    print('Detecting peaks')
-    peaks = look_at_pmt_data(pmt_window, time_window)
+#     print('Detecting peaks')
+#     peaks = look_at_pmt_data(pmt_window, time_window, mat.stem, tdms.stem, mat.parent.name)
