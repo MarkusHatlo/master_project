@@ -200,7 +200,7 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     fig, (ax1) = plt.subplots(1, 1, figsize=(7,7))
 
 
-    ax1.plot(x,color='black')
+    ax1.plot(y_smooth,color='black')
     # ax1.plot(baseline,color='red')
     ax1.set_xlim(int(9.7e5),int(1e6))
 
@@ -208,6 +208,7 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     y_dot = [3,1.5,1.5,0.51,0.6]
     ax1.plot(x_dot, y_dot, 'o', color='red')
 
+    # ax2.plot(pmt_pressure_dataFrame['Cam_trig'])
     # ax2.plot(y,color='blue')
     # ax2.axhline(0)
 
@@ -278,6 +279,7 @@ pmt_pressure_dataFrame = load_mat_data(mat)
 
 pmt_window   = pmt_pressure_dataFrame['PMT']
 time_window  = pmt_pressure_dataFrame['timestamps']
+
 
 # print('Detecting peaks')
 # peaks = look_at_pmt_data(pmt_window, time_window)

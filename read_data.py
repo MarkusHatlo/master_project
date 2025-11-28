@@ -289,7 +289,7 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
 def detect_pmt_peaks(x, ts,
                      smooth_ms=100,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
-                     min_distance_s=0.30,  # refractory time between peaks
+                     min_distance_s=0.05,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
                      prominence_sigma=7.0, # how strong above noise
                      rel_height=0.5):      # width at 50% prominence
@@ -820,7 +820,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             if log_no in {1,2,3}:
                 print('Defining calculation windows')
                 window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
-                pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop].to_numpy(float)
+                pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop]
                 time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
             else:
                 pmt_window   = pmt_pressure_dataFrame['P1']
@@ -931,17 +931,20 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(do_Freq_FFT=True)
+# main(do_Freq_FFT=True)
 
-# base_path = Path(r'data\01_09_D_120mm_260mm')
-# # tdms = base_path / 'ER1_0.9_log5_01.09.2025_11.31.07.tdms'
-# # mat  = base_path / 'Up_45_ERp_0.9_PH2p_0_11_31_27.mat'
+base_path = Path(r'data\01_09_D_120mm_260mm')
+tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19'
+mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22'
 
 # tdms = base_path / 'ER1_0.95_log6_01.09.2025_11.53.29.tdms'
 # mat  = base_path / 'Up_53_ERp_0.95_PH2p_0_11_53_32.mat'
 
-# pmt_pressure_dataFrame = load_mat_data(mat)
-# fft_stats = calculate_fft(pmt_pressure_dataFrame['PMT'],pmt_pressure_dataFrame['timestamps'], mat.stem, tdms.stem, mat.parent.name,stop_after_s=60)
+pmt_pressure_dataFrame = load_mat_data(mat)
+pmt_window = pmt_pressure_dataFrame['PMT'].iloc[0.9e6:1.1e6]
+time_window = pmt_pressure_dataFrame['timestamps'].iloc[0.9e6:1.1e6]
+
+fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
 
 # base_path = Path(r'data\28_08_D_100mm_260mm')
 # tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
@@ -955,6 +958,3 @@ end = time.time()
 print("Elapsed:", end - start, "seconds")
 
 
-# Kjør LBO, 1.02 og ingen windowing, ikke 1, null!
-# Kjør FFT på pressure
-# Kanskje sjekk hvordan segmented data ser ut
