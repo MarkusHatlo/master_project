@@ -286,8 +286,8 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     # ax.set_ylabel('Velocity [m/s]')
     # plt.show()
 
-def detect_pmt_peaks(x, ts,
-                     smooth_ms=100,         # small smoothing for noise
+def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop,
+                     smooth_ms=300,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.05,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
@@ -297,8 +297,6 @@ def detect_pmt_peaks(x, ts,
     df: DataFrame with columns ['timestamps', col]
     Returns: peaks_df with timestamp, height, prominence, width_s, left_base_ts, right_base_ts
     """
-    # ts = pd.to_datetime(df['timestamps'])
-    # x  = df[col].to_numpy(dtype=float)
 
     # --- sampling rate ---
     dt = ts.diff().dt.total_seconds().median()
@@ -330,31 +328,52 @@ def detect_pmt_peaks(x, ts,
         rel_height=rel_height
     )
 
-    # Optional: refine each peak to the local maximum in the raw signal
-    # (in case smoothing shifted it slightly)
-    if idx.size:
-        halfw = max(1, int(0.02 * fs))  # search ±20 ms
-        ref = []
-        for i in idx:
-            lo = max(0, i-halfw); hi = min(len(x), i+halfw+1)
-            i_ref = lo + np.argmax(x[lo:hi])
-            ref.append(i_ref)
-        idx = np.array(ref, dtype=int)
-
     # Build result table
     widths_s = props['widths'] * dt
     left_b   = props['left_bases'].astype(int, copy=False)
     right_b  = props['right_bases'].astype(int, copy=False)
 
+    print('Plotting')
+    ts_seconds = (ts - ts.iloc[0]).dt.total_seconds().to_numpy()
+    t_xaxis = ts_seconds
+
     peaks_df = pd.DataFrame({
         'idx': idx,
         'timestamp': ts.to_numpy()[idx],
+        't_s': ts_seconds[idx],
         'height': x[idx],
         'prominence': props['prominences'],
         'width_s': widths_s,
         'left_base_ts': ts.to_numpy()[left_b],
         'right_base_ts': ts.to_numpy()[right_b],
     })
+
+    fig, ax1 = plt.subplots(1, 1, figsize=(11, 3.5))
+    
+    ax1.plot(t_xaxis, y, label='PMT', linewidth=1)
+    ax1.scatter(peaks_df['t_s'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
+    
+    if window_start != 0 and window_stop != 0:
+        ax1.axvspan(
+            t_xaxis[window_start],
+            t_xaxis[window_stop-1],
+            color='grey',
+            alpha=0.2)
+    
+    ax1.set_title("P1 vs Time (with peaks)")
+    ax1.set_xlabel("Time")
+    ax1.set_ylabel("PMT")
+    ax1.grid(True, which="both", linestyle="--", alpha=0.4)
+    ax1.legend()
+    
+    plt.tight_layout()
+
+    picture_path = Path('pictures')
+    out_dir = picture_path / 'Peaks_log4,5,6' / folderName
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
+    fig.savefig(out_path, dpi=300,bbox_inches='tight')
+    plt.close()
 
     return peaks_df
 
@@ -404,14 +423,17 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
     }
 
 def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
-    fig, [ax1,ax2] = plt.subplots(2, 1, figsize=(11, 3.5))
-    ax1.plot(pmt_pressure_df['timestamps'], pmt_pressure_df['P1'], label='PMT', linewidth=1)
+    
+    t_xaxis = pmt_pressure_df.index.to_numpy() / 50000
+    fig, ax1 = plt.subplots(1, 1, figsize=(11, 3.5))
+    ax1.plot(t_xaxis, pmt_pressure_df['P1'], label='PMT', linewidth=1)
     ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
-    # ax1.axvspan(
-    #     pmt_pressure_df['timestamps'].iloc[window_start],
-    #     pmt_pressure_df['timestamps'].iloc[window_stop-1],
-    #     color='grey',
-    #     alpha=0.2)
+    if window_start != 0 and window_stop != 0:
+        ax1.axvspan(
+            t_xaxis.iloc[window_start],
+            t_xaxis.iloc[window_stop-1],
+            color='grey',
+            alpha=0.2)
     ax1.set_title("P1 vs Time (with peaks)")
     ax1.set_xlabel("Time")
     ax1.set_ylabel("P1")
@@ -419,16 +441,8 @@ def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_d
     ax1.legend()
     plt.tight_layout()
 
-    flow_df.plot(ax=ax2, x="Time", y=["air_volum_flow", "CH4_volum_flow"], linewidth=1)
-    ax2.set_title("Mass Flow vs Time")
-    ax2.set_xlabel("Time")
-    ax2.set_ylabel("Mass flow")
-    ax2.grid(True, which="both", linestyle="--", alpha=0.4)
-    ax2.legend()
-    fig.tight_layout()
-
     picture_path = Path('pictures')
-    out_dir = picture_path / 'pressure_FFT' / folderName
+    out_dir = picture_path / 'Peaks_log4,5,6' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -817,18 +831,8 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             print('Frequency candidate (log 4,5,6)')
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
-            if log_no in {1,2,3}:
-                print('Defining calculation windows')
-            #     window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
-            #     pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop]
-            #     time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
-            # else:
-            #     pmt_window   = pmt_pressure_dataFrame['P1']
-            #     time_window  = pmt_pressure_dataFrame['timestamps']
-            #     window_start = 0
-            #     window_stop = 0
+
             manual_windows = pd.read_csv("manual_windows.csv")
-            # Convert filename column to something easy to search
             manual_windows.set_index("filename", inplace=True)
 
             if mat in manual_windows.index:
@@ -848,8 +852,8 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             try:
                 print('Detecting peaks')
                 peaks = detect_pmt_peaks(pmt_window, time_window)
-                print('Plotting')
-                plot_with_peaks(pmt_pressure_dataFrame, peaks,flow_dataFrame, mat.stem, tdms.stem, mat.parent.name,window_start,window_stop)
+                # print('Plotting')
+                # plot_with_peaks(pmt_pressure_dataFrame, peaks,flow_dataFrame, mat.stem, tdms.stem, mat.parent.name,window_start,window_stop)
                 print('Calculating freq')
                 stats = peak_period_frequency(peaks)
             except ValueError:
