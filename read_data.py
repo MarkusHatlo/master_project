@@ -819,14 +819,31 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             pmt_pressure_dataFrame = load_mat_data(mat)
             if log_no in {1,2,3}:
                 print('Defining calculation windows')
-                window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
-                pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop]
-                time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
+            #     window_start, window_stop = calculating_window(pmt_pressure_dataFrame,flow_dataFrame)
+            #     pmt_window   = pmt_pressure_dataFrame['P1'].iloc[window_start:window_stop]
+            #     time_window  = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
+            # else:
+            #     pmt_window   = pmt_pressure_dataFrame['P1']
+            #     time_window  = pmt_pressure_dataFrame['timestamps']
+            #     window_start = 0
+            #     window_stop = 0
+            manual_windows = pd.read_csv("manual_windows.csv")
+            # Convert filename column to something easy to search
+            manual_windows.set_index("filename", inplace=True)
+
+            if mat in manual_windows.index:
+                # Retrieve pre-set manual indices
+                window_start = int(manual_windows.loc[mat, "start_idx"])
+                window_stop  = int(manual_windows.loc[mat, "stop_idx"])
+
+                pmt_window  = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop]
+                time_window = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
+
             else:
-                pmt_window   = pmt_pressure_dataFrame['P1']
-                time_window  = pmt_pressure_dataFrame['timestamps']
-                window_start = 0
-                window_stop = 0
+                # Default: use the entire dataset
+                pmt_window  = pmt_pressure_dataFrame['PMT']
+                time_window = pmt_pressure_dataFrame['timestamps']
+
 
             try:
                 print('Detecting peaks')
