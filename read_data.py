@@ -287,7 +287,7 @@ def calculate_U_ER(pmt_pressure_df: pd.DataFrame, flow_df: pd.DataFrame, show_pl
     # plt.show()
 
 def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop,
-                     smooth_ms=300,         # small smoothing for noise
+                     smooth_ms=100,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.05,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
@@ -341,7 +341,8 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
         'idx': idx,
         'timestamp': ts.to_numpy()[idx],
         't_s': ts_seconds[idx],
-        'height': x[idx],
+        'height_raw': x[idx],
+        'height': y[idx],
         'prominence': props['prominences'],
         'width_s': widths_s,
         'left_base_ts': ts.to_numpy()[left_b],
@@ -353,7 +354,7 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     ax1.plot(t_xaxis, y, label='PMT', linewidth=1)
     ax1.scatter(peaks_df['t_s'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
     
-    if window_start != 0 and window_stop != 0:
+    if window_start is not None and window_stop is not None:
         ax1.axvspan(
             t_xaxis[window_start],
             t_xaxis[window_stop-1],
@@ -405,6 +406,7 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
     period_mad = 1.4826 * np.median(np.abs(periods_s - period_med))
     freq_med   = np.median(freq_inst)
     freq_mad   = 1.4826 * np.median(np.abs(freq_inst - freq_med))
+    print('This is the counted peaks mean frequency: ', float(freq_mean))
 
     return {
         "n_peaks": len(ts),
@@ -770,23 +772,27 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
 
-            if mat in manual_windows.index:
+            fname = mat.name
+            if fname in manual_windows.index:
+                print(f"Using manual window for {fname}")
                 # Retrieve pre-set manual indices
-                window_start = int(manual_windows.loc[mat, "start_idx"])
-                window_stop  = int(manual_windows.loc[mat, "stop_idx"])
+                row = manual_windows.loc[fname]
+                window_start_int = int(row["start_idx"])
+                window_stop_int  = int(row["stop_idx"])
 
-                pmt_window  = pmt_pressure_dataFrame['PMT'].iloc[window_start:window_stop]
-                time_window = pmt_pressure_dataFrame['timestamps'].iloc[window_start:window_stop]
-
+                pmt_window  = pmt_pressure_dataFrame['PMT'].iloc[window_start_int:window_stop_int]
+                time_window = pmt_pressure_dataFrame['timestamps'].iloc[window_start_int:window_stop_int]
             else:
-                # Default: use the entire dataset
+                print(f"No manual window for {fname}, using full signal")
                 pmt_window  = pmt_pressure_dataFrame['PMT']
                 time_window = pmt_pressure_dataFrame['timestamps']
+                window_start_int = None
+                window_stop_int  = None
 
 
             try:
                 print('Detecting peaks')
-                peaks = detect_pmt_peaks(pmt_window, time_window)
+                peaks = detect_pmt_peaks(pmt_window, time_window,mat.stem, tdms.stem, mat.parent.name,window_start_int,window_stop_int)
                 print('Calculating freq')
                 stats = peak_period_frequency(peaks)
             except ValueError:
