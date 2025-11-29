@@ -8,7 +8,7 @@ import re
 import time
 
 from scipy import fft as sfft
-from scipy.signal import find_peaks, savgol_filter
+from scipy.signal import find_peaks, savgol_filter,butter, filtfilt
 from scipy import signal
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -175,7 +175,7 @@ def load_tdms_data(tdms_path: Path):
         return flow_df
 
 def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str,
-                     smooth_ms=100,         # small smoothing for noise
+                     smooth_ms=500,         # small smoothing for noise
                      baseline_ms=1000,      # rolling-median baseline removal
                      min_distance_s=0.30,  # refractory time between peaks
                      min_width_ms=10,      # discard ultra-narrow blips
@@ -196,23 +196,24 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
     y_smooth = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
 
-    # fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
-    fig, (ax1) = plt.subplots(1, 1, figsize=(7,7))
+
+    fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
+    # fig, (ax1) = plt.subplots(1, 1, figsize=(7,7))
 
 
-    ax1.plot(y_smooth,color='black')
-    # ax1.plot(baseline,color='red')
-    ax1.set_xlim(int(9.7e5),int(1e6))
+    ax1.plot(x,color='black')
+    ax1.plot(baseline,color='red')
+    # ax1.set_xlim(int(9.7e5),int(1e6))
 
-    x_dot = [9.845e5,9.83e5,9.88e5,9.8e5,9.896e5]
-    y_dot = [3,1.5,1.5,0.51,0.6]
-    ax1.plot(x_dot, y_dot, 'o', color='red')
+    # x_dot = [9.845e5,9.83e5,9.88e5,9.8e5,9.896e5]
+    # y_dot = [3,1.5,1.5,0.51,0.6]
+    # ax1.plot(x_dot, y_dot, 'o', color='red')
 
     # ax2.plot(pmt_pressure_dataFrame['Cam_trig'])
-    # ax2.plot(y,color='blue')
-    # ax2.axhline(0)
+    ax2.plot(y,color='blue')
+    ax2.axhline(0)
 
-    # ax3.plot(y_smooth)
+    ax3.plot(y_smooth)
 
     plt.tight_layout()
     plt.show()
@@ -260,12 +261,12 @@ def check_freq_resolution(input_signal, input_time):
 
 # Single data
 # ------------------------------------------------------------------------------------------------------
-base_path = Path(r'only_good_data\29_08_D_88mm_260mm')
-# mat  = base_path / 'Up_7_ERp_0.6_PH2p_0_11_24_6.mat'
-# tdms = base_path / "ER1_0,6_Log6_03.09.2025_11.24.02.tdms"
+base_path = Path(r'data_handpicked\03_09_D_88mm_350mm')
+mat  = base_path / 'LBO_Sweep_1_8_39_29.mat'
+tdms = base_path / "ER1_0,65_Log1_03.09.2025_08.39.27.tdms"
 
-tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19.tdms'
-mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22.mat'
+# tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19.tdms'
+# mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22.mat'
 
 print('Making the dataframes')
 pmt_pressure_dataFrame = load_mat_data(mat)

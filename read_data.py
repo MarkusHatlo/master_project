@@ -368,8 +368,8 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     
     plt.tight_layout()
 
-    picture_path = Path('pictures')
-    out_dir = picture_path / 'Peaks_log4,5,6' / folderName
+    picture_path = Path('pictures_git')
+    out_dir = picture_path / 'log4,5,6' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -422,34 +422,6 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
         "freq_MAD_Hz": float(freq_mad),
     }
 
-def plot_with_peaks(pmt_pressure_df: pd.DataFrame,peaks_df: pd.DataFrame, flow_df: pd.DataFrame, matFileName: str, tdmsFileName: str, folderName: str,window_start, window_stop):
-    
-    t_xaxis = pmt_pressure_df.index.to_numpy() / 50000
-    fig, ax1 = plt.subplots(1, 1, figsize=(11, 3.5))
-    ax1.plot(t_xaxis, pmt_pressure_df['P1'], label='PMT', linewidth=1)
-    ax1.scatter(peaks_df['timestamp'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
-    if window_start != 0 and window_stop != 0:
-        ax1.axvspan(
-            t_xaxis.iloc[window_start],
-            t_xaxis.iloc[window_stop-1],
-            color='grey',
-            alpha=0.2)
-    ax1.set_title("P1 vs Time (with peaks)")
-    ax1.set_xlabel("Time")
-    ax1.set_ylabel("P1")
-    ax1.grid(True, which="both", linestyle="--", alpha=0.4)
-    ax1.legend()
-    plt.tight_layout()
-
-    picture_path = Path('pictures')
-    out_dir = picture_path / 'Peaks_log4,5,6' / folderName
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
-    fig.savefig(out_path, dpi=300,bbox_inches='tight')
-    plt.close()
-    
-    return
-
 def calculate_fft(
     input_signal,
     input_time,
@@ -458,7 +430,6 @@ def calculate_fft(
     folderName: str,
     lowpass_cutoff: float = None,
     overlap: float = 0.5,
-    stop_after_s: float | None = None
 ):
     """
     Compute and plot:
@@ -485,21 +456,8 @@ def calculate_fft(
             raise ValueError(f"lowpass_cutoff must be between 0 and Nyquist ({nyq:.3f} Hz).")
 
     x = np.asarray(input_signal, float)
-    t = np.asarray(input_time)
-
-    # --- manual hard stop by elapsed time (optional) ---
-    if stop_after_s is not None:
-        # robust elapsed seconds from the time vector
-        if hasattr(input_time, "iloc"):  # pandas Series of datetimes
-            elapsed_s = (input_time - input_time.iloc[0]).dt.total_seconds().to_numpy()
-        else:  # numpy datetime64
-            elapsed_s = ((t - t[0]).astype('timedelta64[ns]').astype('int64')) / 1e9
-
-        end = int(np.searchsorted(elapsed_s, stop_after_s, side="right"))
-        end = max(0, min(end, len(x)))
-        x, t = x[:end], t[:end]
-
-
+    t = (input_time - input_time.iloc[0]).dt.total_seconds().to_numpy()
+    
     # --- center signal (remove DC mean) ---
     x = x - np.mean(x)
 
@@ -554,29 +512,6 @@ def calculate_fft(
             amp /= coherent_gain
 
             seg_amps.append(amp)
-
-        # if not seg_amps:
-        #     # nothing to average; raise a clear error instead of returning None
-        #     raise ValueError(
-        #         f"No segments were formed: len(x_arr)={len(x_arr)}, "
-        #         f"seg_len={seg_len}, step_samples={step_samples}"
-        #     )
-        #     # fallback: just do one FFT on the full signal if seg_len is too big
-        #     seg_len = len(x_arr)
-        #     w = signal.windows.hann(seg_len, sym=False)
-        #     coherent_gain = w.mean()
-
-        #     seg_w = x_arr * w
-        #     fft_out = sfft.rfft(seg_w)
-        #     freqs = sfft.rfftfreq(seg_len, d=1/fs)
-
-        #     amp = (2.0 / seg_len) * np.abs(fft_out)
-        #     amp[0] /= 2.0
-        #     if seg_len % 2 == 0:
-        #         amp[-1] /= 2.0
-        #     amp /= coherent_gain
-
-        #     seg_amps = [amp]
 
         seg_amps = np.vstack(seg_amps)
         avg_amp = seg_amps.mean(axis=0)
@@ -640,9 +575,9 @@ def calculate_fft(
     ax1.plot(t, x, label='Raw (DC removed)')
     if filtered_signal is not None:
         ax1.plot(t, filtered_signal, label='Lowpass', linewidth=1.5)
-    ax1.set_title('P1 data')
-    ax1.set_ylabel('P1 signal')
-    ax1.set_xlabel('Time')
+    ax1.set_title('PMT data')
+    ax1.set_ylabel('PMT signal')
+    ax1.set_xlabel('Time [s]')
     if filtered_signal is not None:
         ax1.legend(fontsize=8)
     ax1.grid(True, linestyle="--", alpha=0.3)
@@ -669,7 +604,7 @@ def calculate_fft(
         )
 
     ax2.set_title(title)
-    ax2.set_ylabel('Amplitude [peak units]')
+    ax2.set_ylabel('Amplitude')
     ax2.set_xlabel('Frequency [Hz]')
     ax2.grid(True, which="both", linestyle="--", alpha=0.4)
     ax2.legend(fontsize=8)
@@ -688,8 +623,8 @@ def calculate_fft(
     plt.tight_layout()
 
     # --- save figure ---
-    picture_path = Path('pictures')
-    out_dir = picture_path / 'pressure_FFT' / folderName
+    picture_path = Path('pictures_git')
+    out_dir = picture_path / 'log4,5,6' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -774,7 +709,10 @@ def load_mat_data(mat_path: Path):
 crossing_threshold = 0
 def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
 
-    base_path = Path('data_only_good')
+    manual_windows = pd.read_csv("manual_windows.csv")
+    manual_windows.set_index("filename", inplace=True)
+
+    base_path = Path('data_handpicked')
     files = iter_data_files(base_path, True)
 
     #Find the pairs in the code
@@ -832,9 +770,6 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
 
-            manual_windows = pd.read_csv("manual_windows.csv")
-            manual_windows.set_index("filename", inplace=True)
-
             if mat in manual_windows.index:
                 # Retrieve pre-set manual indices
                 window_start = int(manual_windows.loc[mat, "start_idx"])
@@ -852,8 +787,6 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             try:
                 print('Detecting peaks')
                 peaks = detect_pmt_peaks(pmt_window, time_window)
-                # print('Plotting')
-                # plot_with_peaks(pmt_pressure_dataFrame, peaks,flow_dataFrame, mat.stem, tdms.stem, mat.parent.name,window_start,window_stop)
                 print('Calculating freq')
                 stats = peak_period_frequency(peaks)
             except ValueError:
@@ -936,7 +869,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
         print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
 
     if do_Freq_FFT and freq_rows:
-        out = Path("freq_results.csv")
+        out = Path("Frequency results from log4,5,6.csv")
         write_header = not out.exists()
         pd.DataFrame(freq_rows).to_csv(
             out, index=False,
@@ -952,20 +885,21 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-# main(do_Freq_FFT=True)
+main(do_Freq_FFT=True)
 
-base_path = Path(r'data\01_09_D_120mm_260mm')
-tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19'
-mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22'
+# -------------------------------------------------------------------------------------------------
+# base_path = Path(r'data\01_09_D_120mm_260mm')
+# tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19'
+# mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22'
 
 # tdms = base_path / 'ER1_0.95_log6_01.09.2025_11.53.29.tdms'
 # mat  = base_path / 'Up_53_ERp_0.95_PH2p_0_11_53_32.mat'
 
-pmt_pressure_dataFrame = load_mat_data(mat)
-pmt_window = pmt_pressure_dataFrame['PMT'].iloc[0.9e6:1.1e6]
-time_window = pmt_pressure_dataFrame['timestamps'].iloc[0.9e6:1.1e6]
+# pmt_pressure_dataFrame = load_mat_data(mat)
+# pmt_window = pmt_pressure_dataFrame['PMT'].iloc[0.9e6:1.1e6]
+# time_window = pmt_pressure_dataFrame['timestamps'].iloc[0.9e6:1.1e6]
 
-fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
+# fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
 
 # base_path = Path(r'data\28_08_D_100mm_260mm')
 # tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"
@@ -974,6 +908,7 @@ fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.paren
 # flow_dataFrame = load_tdms_data(tdms)
 # pmt_pressure_dataFrame = load_mat_data(mat)
 # calculate_U_ER(pmt_pressure_dataFrame,flow_dataFrame,True)
+# -------------------------------------------------------------------------------------------------
 
 end = time.time()
 print("Elapsed:", end - start, "seconds")
