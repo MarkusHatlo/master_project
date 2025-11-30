@@ -997,8 +997,12 @@ def plot_freq_vs_U_by_geom(csv_path):
         )
 
     # --- Su Tong reference curve ---
-    SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
-    SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    # SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
+    # SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    SuTong_freq = [0.5, 1, 2, 4.25]
+    SuTong_vel  = [10, 20, 35, 60]
+
+
     ax.plot(
         SuTong_vel,
         SuTong_freq,
@@ -1151,8 +1155,11 @@ def plot_mean_freq_vs_U_by_geom(
         )
 
     # --- Su Tong reference curve (unchanged) ---
-    SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
-    SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    # SuTong_freq = [0.5, 1, 2, 4.25, 7.75, 9]
+    # SuTong_vel  = [10, 20, 35, 60, 85, 110]
+    SuTong_freq = [0.5, 1, 2, 4.25]
+    SuTong_vel  = [10, 20, 35, 60]
+
     ax.plot(
         SuTong_vel,
         SuTong_freq,
@@ -1226,5 +1233,5 @@ plot_freq_vs_U_by_geom(csv_path)
 plot_mean_freq_vs_U_by_geom(csv_path, force_recompute=True)
 
 plot_freq_mean_vs_f0(src_csv=csv_path)
-# plot_freq_points_vs_f0(csv_path)
+plot_freq_points_vs_f0(csv_path)
 

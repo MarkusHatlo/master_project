@@ -554,15 +554,17 @@ def calculate_fft(
 
     # --- Welch PSD for subplot 3 (this is standard PSD, not amplitude) ---
     # choose Welch params consistent with segmenting idea
-    noverlap = int(nperseg * overlap)
-    if noverlap >= nperseg:
-        noverlap = nperseg - 1  # safety clamp
+    nperseg_welch = min(nperseg, len(x))
+
+    noverlap = int(nperseg_welch * overlap)
+    if noverlap >= nperseg_welch:
+        noverlap = nperseg_welch - 1  # safety clamp
 
     f_welch, Pxx = signal.welch(
         x,
         fs=fft_fs,
         window='hann',
-        nperseg=nperseg,
+        nperseg=nperseg_welch,
         noverlap=noverlap,
         detrend='constant',
         scaling='density',
