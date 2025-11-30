@@ -7,9 +7,9 @@ import scipy.io as sio
 from datetime import datetime, timedelta
 
 
-DATA_ROOT = Path("data")  # <-- change if needed
+DATA_ROOT = Path("data_handpicked")  # <-- change if needed
 
-FREQ_CSV = Path("freq_results_2_windows.csv")  
+FREQ_CSV = Path("Frequency results from log1,2,3.csv")  
 
 crossing_threshold = 0
 

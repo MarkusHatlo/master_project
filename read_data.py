@@ -337,12 +337,18 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     ts_seconds = (ts - ts.iloc[0]).dt.total_seconds().to_numpy()
     t_xaxis = ts_seconds
 
+    x_arr = x.to_numpy()
+    ts_arr = ts.to_numpy()
+    ts_seconds_arr = np.asarray(ts_seconds) 
+    y_arr = np.asarray(y)   
+
+
     peaks_df = pd.DataFrame({
         'idx': idx,
-        'timestamp': ts.to_numpy()[idx],
-        't_s': ts_seconds[idx],
-        'height_raw': x[idx],
-        'height': y[idx],
+        'timestamp': ts_arr[idx],       
+        't_s': ts_seconds_arr[idx],     
+        'height_raw': x_arr[idx],       
+        'height': y_arr[idx], 
         'prominence': props['prominences'],
         'width_s': widths_s,
         'left_base_ts': ts.to_numpy()[left_b],
@@ -354,12 +360,12 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     ax1.plot(t_xaxis, y, label='PMT', linewidth=1)
     ax1.scatter(peaks_df['t_s'], peaks_df['height'], marker='o', color='red', s=18, zorder=3, label='Detected peaks')
     
-    if window_start is not None and window_stop is not None:
-        ax1.axvspan(
-            t_xaxis[window_start],
-            t_xaxis[window_stop-1],
-            color='grey',
-            alpha=0.2)
+    # if window_start is not None and window_stop is not None:
+    #     ax1.axvspan(
+    #         t_xaxis[window_start],
+    #         t_xaxis[window_stop-1],
+    #         color='grey',
+    #         alpha=0.2)
     
     ax1.set_title("P1 vs Time (with peaks)")
     ax1.set_xlabel("Time")
@@ -370,7 +376,7 @@ def detect_pmt_peaks(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     plt.tight_layout()
 
     picture_path = Path('pictures_git')
-    out_dir = picture_path / 'log4,5,6' / folderName
+    out_dir = picture_path / 'log1,2,3 with zero padding' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_peaks.png'
     fig.savefig(out_path, dpi=300,bbox_inches='tight')
@@ -406,7 +412,6 @@ def peak_period_frequency(peaks_df, timestamp_col='timestamp'):
     period_mad = 1.4826 * np.median(np.abs(periods_s - period_med))
     freq_med   = np.median(freq_inst)
     freq_mad   = 1.4826 * np.median(np.abs(freq_inst - freq_med))
-    print('This is the counted peaks mean frequency: ', float(freq_mean))
 
     return {
         "n_peaks": len(ts),
@@ -463,10 +468,14 @@ def calculate_fft(
     # --- center signal (remove DC mean) ---
     x = x - np.mean(x)
 
-    # --- choose segment length for FFT averaging ---
-    total_N = len(x)
+    # --- ZERO PADDING (same length as original) -----------------
+    x_fft = np.concatenate([x, np.zeros_like(x)])  # padded signal for FFT
+    total_N = len(x_fft)                           # this is now 2 * N_orig
 
-    nperseg = total_N // 6
+    # # --- choose segment length for FFT averaging ---
+    # total_N = len(x)
+
+    nperseg = total_N
 
     resolution = fft_fs/nperseg
 
@@ -482,12 +491,12 @@ def calculate_fft(
         """
         Returns freqs [Hz], avg_amp [same units as x], and also the stack of amps.
         """
-        w = signal.windows.hann(seg_len, sym=False)
-        coherent_gain = w.mean()
+        # w = signal.windows.hann(seg_len, sym=False)
+        # coherent_gain = w.mean()
 
-        # # No Hann window: use rectangular window
-        # w = np.ones(seg_len)
-        # coherent_gain = 1.0
+        # No Hann window: use rectangular window
+        w = np.ones(seg_len)
+        coherent_gain = 1.0
 
         seg_amps = []
         for start in range(0, len(x_arr) - seg_len + 1, step_samples):
@@ -522,7 +531,7 @@ def calculate_fft(
 
     # --- run the averaged FFT amplitude calc ---
     f_amp, avg_amp, _all_seg_amps = segmented_fft_average_amp(
-        x_arr=x,
+        x_arr=x_fft,
         fs=fft_fs,
         seg_len=nperseg,
         step_samples=step,
@@ -626,7 +635,7 @@ def calculate_fft(
 
     # --- save figure ---
     picture_path = Path('pictures_git')
-    out_dir = picture_path / 'log4,5,6' / folderName
+    out_dir = picture_path / 'log1,2,3 with zero padding' / folderName
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
     fig.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -766,9 +775,9 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
             "time_diff" : time_difference
             })
 
-        # ------- Frequency path: logs 4,5,6 -------
-        elif do_Freq_FFT and log_no in {4,5,6}:
-            print('Frequency candidate (log 4,5,6)')
+        # ------- Frequency path: -------
+        elif do_Freq_FFT and log_no in {1,2,3}:
+            print('Frequency candidate (log 1,2,3)')
             flow_dataFrame = load_tdms_data(tdms)
             pmt_pressure_dataFrame = load_mat_data(mat)
 
@@ -875,7 +884,7 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
         print(f'No zero crossing: {no_zero_cross} and unpaired: {unpaired}')
 
     if do_Freq_FFT and freq_rows:
-        out = Path("Frequency results from log4,5,6.csv")
+        out = Path("Frequency results from log1,2,3 with zero padding.csv")
         write_header = not out.exists()
         pd.DataFrame(freq_rows).to_csv(
             out, index=False,
