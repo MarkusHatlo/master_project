@@ -142,7 +142,7 @@ def plot_split_by_D(data_avg, target_D=88, show_folder_legends=False):
     mask_target = data_avg["D_mm"].eq(target_D)
     color_for_height, height_handles = make_height_colors(data_avg["H_mm"])
 
-    fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12, 5), sharex=True, sharey=True)
+    fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(7, 7), sharex=True, sharey=True)
 
     # oscillations_U_88_1 = [7,8,14,20,26,8,15,39]
     # oscillations_ER_88_1 = [0.6,0.65,0.7,0.71,0.72,0.6,0.7,0.75]
@@ -488,7 +488,6 @@ def plot_freq_mean_vs_f0(
 
     ax.set_xlabel("FFT frequency [Hz]")
     ax.set_ylabel("Counted peaks frequency [Hz]")
-    ax.set_title("Counted peaks frequency vs FFT frequency")
     ax.grid(True, alpha=0.3)
 
     # Legends
@@ -577,7 +576,6 @@ def plot_freq_points_vs_f0(
 
     ax.set_xlabel("FFT frequency [Hz]")
     ax.set_ylabel("Counted peaks frequency [Hz]")
-    ax.set_title("Counted peaks vs FFT — all points")
     ax.grid(True, alpha=0.3)
 
     # Legends (same layout philosophy as before)
@@ -947,7 +945,7 @@ def plot_freq_vs_U_by_geom5(csv_path):
     plt.tight_layout()
     plt.show()
 
-def plot_freq_vs_U_by_geom(csv_path):
+def plot_freq_vs_U_by_geom(csv_path, fft_or_peaks):
     """
     Plot FFT peak frequency vs U, with lines separated by (D_mm, H_mm),
     using the same color + marker system as before:
@@ -969,7 +967,7 @@ def plot_freq_vs_U_by_geom(csv_path):
         freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
 
     # --- Keep only rows with both U and frequency defined ---
-    freq_df = freq_df.dropna(subset=["U", 'fft_f0_Hz'])
+    freq_df = freq_df.dropna(subset=["U", fft_or_peaks])
 
     # --- Colors: same system as before ---
     # This gives you: dict H_mm -> color, and legend handles for heights
@@ -989,7 +987,7 @@ def plot_freq_vs_U_by_geom(csv_path):
 
         ax.plot(
             sub["U"].values,
-            sub['fft_f0_Hz'].values,
+            sub[fft_or_peaks].values,
             linestyle="",
             marker=mk,
             color=color_for_height(H),
@@ -1059,7 +1057,6 @@ def plot_freq_vs_U_by_geom(csv_path):
     # --- Axes / styling ---
     ax.set_xlabel("U [m/s]")
     ax.set_ylabel("FFT peak frequency [Hz]")
-    ax.set_title("FFT peak frequency vs Velocity U")
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
@@ -1067,8 +1064,10 @@ def plot_freq_vs_U_by_geom(csv_path):
 
 def plot_mean_freq_vs_U_by_geom(
     csv_path: str,
+    fft_or_peaks,
     avg_csv_path: str = "freq_avg_by_folder_D_H_ER.csv",
     force_recompute: bool = False,
+    
 ):
     """
     Plot *averaged* FFT peak frequency vs U, with one marker per
@@ -1103,7 +1102,7 @@ def plot_mean_freq_vs_U_by_geom(
         freq_df["U"] = freq_df["mat_file"].astype(str).apply(extract_U_from_mat)
 
     # Keep only rows with valid U, freq and ER
-    freq_df = freq_df.dropna(subset=["U", "fft_f0_Hz", "ER_guess", "D_mm", "H_mm"])
+    freq_df = freq_df.dropna(subset=["U", fft_or_peaks, "ER_guess", "D_mm", "H_mm"])
 
     # --- Load (or build) the averaged frequencies over ER ---
     avg_freq = load_or_make_avg_freq(
@@ -1147,7 +1146,7 @@ def plot_mean_freq_vs_U_by_geom(
 
         ax.plot(
             sub["U"].values,           # mean U per ER
-            sub["fft_f0_Hz"].values,   # mean FFT peak freq per ER
+            sub[fft_or_peaks].values,   # mean FFT peak freq per ER
             linestyle="",
             marker=mk,
             color=color_for_height(H),
@@ -1214,24 +1213,29 @@ def plot_mean_freq_vs_U_by_geom(
 
     # --- Axes / styling ---
     ax.set_xlabel("U [m/s]")
-    ax.set_ylabel("Mean FFT peak frequency [Hz]")
-    ax.set_title("Mean FFT peak frequency vs U (averaged by ER)")
+    if fft_or_peaks == 'freq_mean_Hz':
+        ax.set_ylabel("Mean counted peaks frequency [Hz]")    
+    else:
+        ax.set_ylabel("Mean FFT peak frequency [Hz]")
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.show()
 
 
-# plot_LBO()
+plot_LBO(r'csv\old\post_process_data.csv')
 
 #Bruk hvis du må merke stjernene på nytt
-# plot_freq_f0_and_a0('freq_results_log456_last.csv')
+# plot_freq_f0_and_a0(r'csv\29.11.25\freq_results_log456_last.csv')
 
-csv_path = 'Frequency results from log1,2,3_with_ER_U.csv'
+csv_path = 'Frequency results from log4,5,6.csv'
 # plot_freq_scatter(csv_path)
-plot_freq_vs_U_by_geom(csv_path)
-plot_mean_freq_vs_U_by_geom(csv_path, force_recompute=True)
+# plot_freq_vs_U_by_geom(csv_path,'fft_f0_Hz')
+# plot_mean_freq_vs_U_by_geom(csv_path,'fft_f0_Hz', force_recompute=True)
 
-plot_freq_mean_vs_f0(src_csv=csv_path)
-plot_freq_points_vs_f0(csv_path)
+# plot_freq_vs_U_by_geom(csv_path,'freq_mean_Hz')
+# plot_mean_freq_vs_U_by_geom(csv_path,'freq_mean_Hz', force_recompute=True)
+
+# plot_freq_mean_vs_f0(src_csv=csv_path)
+# plot_freq_points_vs_f0(csv_path)
 
