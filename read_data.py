@@ -596,7 +596,7 @@ def calculate_fft(
     ax1.grid(True, linestyle="--", alpha=0.3)
 
     # 2) averaged amplitude FFT
-    ax2.plot(f_amp, avg_amp, label='FFT')
+    ax2.stem(f_amp, avg_amp, label='FFT', basefmt=" ")
     ax2.set_xlim(0, 10)
     title = 'FFT amplitude'
     if lowpass_cutoff is not None:
@@ -615,7 +615,6 @@ def calculate_fft(
             textcoords='offset points',
             fontsize=8
         )
-
     ax2.set_title(title)
     ax2.set_ylabel('Amplitude')
     ax2.set_xlabel('Frequency [Hz]')
@@ -634,14 +633,15 @@ def calculate_fft(
     ax3.grid(True, which="both", linestyle="--", alpha=0.4)
 
     plt.tight_layout()
+    plt.show()
 
     # --- save figure ---
-    picture_path = Path('pictures_git')
-    out_dir = picture_path / 'log1,2,3 with zero padding' / folderName
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
-    fig.savefig(out_path, dpi=300, bbox_inches='tight')
-    plt.close(fig)
+    # picture_path = Path('pictures_git')
+    # out_dir = picture_path / 'log1,2,3 with zero padding' / folderName
+    # out_dir.mkdir(parents=True, exist_ok=True)
+    # out_path = out_dir / f'{matFileName}_and_{tdmsFileName}_FFT.png'
+    # fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    # plt.close(fig)
 
     return {
         "fs_Hz": float(fft_fs),
@@ -902,21 +902,39 @@ def main(do_LBO = False, do_Freq_FFT = False, do_Pressure = False):
     print(f'Unpaired files: {unpaired}')
 
 start = time.time()
-main(do_Freq_FFT=True)
+# main(do_Freq_FFT=True)
 
 # -------------------------------------------------------------------------------------------------
-# base_path = Path(r'data\01_09_D_120mm_260mm')
-# tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19'
-# mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22'
-
+base_path = Path(r'data\02_09_D_88mm_200mm')
+tdms = base_path / 'ER1_0,75_Log3_02.09.2025_14.36.07.tdms'
+mat  = base_path / 'LBO_Sweep_3_14_36_10.mat'
 # tdms = base_path / 'ER1_0.95_log6_01.09.2025_11.53.29.tdms'
 # mat  = base_path / 'Up_53_ERp_0.95_PH2p_0_11_53_32.mat'
 
-# pmt_pressure_dataFrame = load_mat_data(mat)
-# pmt_window = pmt_pressure_dataFrame['PMT'].iloc[0.9e6:1.1e6]
-# time_window = pmt_pressure_dataFrame['timestamps'].iloc[0.9e6:1.1e6]
 
-# fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
+
+pmt_pressure_dataFrame = load_mat_data(mat)
+manual_windows = pd.read_csv("manual_windows.csv")
+manual_windows.set_index("filename", inplace=True)
+
+fname = mat.name
+if fname in manual_windows.index:
+    print(f"Using manual window for {fname}")
+    # Retrieve pre-set manual indices
+    row = manual_windows.loc[fname]
+    window_start_int = int(row["start_idx"])
+    window_stop_int  = int(row["stop_idx"])
+
+    pmt_window  = pmt_pressure_dataFrame['PMT'].iloc[window_start_int:window_stop_int]
+    time_window = pmt_pressure_dataFrame['timestamps'].iloc[window_start_int:window_stop_int]
+else:
+    print(f"No manual window for {fname}, using full signal")
+    pmt_window  = pmt_pressure_dataFrame['PMT']
+    time_window = pmt_pressure_dataFrame['timestamps']
+    window_start_int = None
+    window_stop_int  = None
+
+fft_stats = calculate_fft(pmt_window,time_window, mat.stem, tdms.stem, mat.parent.name)
 
 # base_path = Path(r'data\28_08_D_100mm_260mm')
 # tdms = base_path / "ER1_0,7_log2_29.08.2025_12.41.22.tdms"

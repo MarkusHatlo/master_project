@@ -184,25 +184,39 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
 
     dt = ts.diff().dt.total_seconds().median()
     fs = 1.0 / dt
+    print(fs)
 
     # --- baseline remove with rolling median (robust to outliers) ---
     win_baseline = max(3, int(round(baseline_ms/1000 * fs)))
     baseline = pd.Series(x).rolling(win_baseline, center=True, min_periods=1).median().to_numpy()
     y = x - baseline
-    w = signal.windows.hann(len(y), sym=False)
-    seg_y = y*w
+    # w = signal.windows.hann(len(y), sym=False)
+    # seg_y = y*w
 
     
-    w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
-    y_smooth = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
+    # w = max(3, int(round(smooth_ms/1000 * fs)) | 1)  # odd
+    # y_smooth = savgol_filter(y, window_length=w, polyorder=2, mode='interp')
+
+    fs = 50000  # your sampling frequency
+    fc = 15    # cutoff frequency in Hz
+
+    b, a = butter(3, fc, fs=fs, btype='low')
+    y_smooth = filtfilt(b, a, y)
+
+    ts_seconds = (ts - ts.iloc[0]).dt.total_seconds().to_numpy()
+    t_xaxis = ts_seconds
+    
+
+    # fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5),sharex=True)
+    fig, (ax3,ax2) = plt.subplots(2, 1, figsize=(12, 5),sharex=True)
+    # fig, (ax1) = plt.subplots(1, 1, figsize=(12,2))
 
 
-    fig, (ax1,ax2,ax3) = plt.subplots(3, 1, figsize=(12, 5))
-    # fig, (ax1) = plt.subplots(1, 1, figsize=(7,7))
-
-
-    ax1.plot(x,color='black')
-    ax1.plot(baseline,color='red')
+    # ax1.plot(t_xaxis,x,color='black')
+    # ax1.plot(t_xaxis,baseline,color='red')
+    # ax1.set_ylabel('PMT amplitude')
+    # ax1.set_xlabel('Time [s]')
+    # plt.xlim(0,15)
     # ax1.set_xlim(int(9.7e5),int(1e6))
 
     # x_dot = [9.845e5,9.83e5,9.88e5,9.8e5,9.896e5]
@@ -210,10 +224,14 @@ def look_at_pmt_data(x, ts, matFileName: str, tdmsFileName: str, folderName: str
     # ax1.plot(x_dot, y_dot, 'o', color='red')
 
     # ax2.plot(pmt_pressure_dataFrame['Cam_trig'])
-    ax2.plot(y,color='blue')
+
+    ax2.plot(t_xaxis,y,color='black')
+    ax2.set_ylabel('PMT amplitude')
     ax2.axhline(0)
 
-    ax3.plot(y_smooth)
+    ax3.plot(t_xaxis,y_smooth, color='black')
+    ax3.set_ylabel('PMT amplitude')
+    ax3.set_xlabel('T [s]')
 
     plt.tight_layout()
     plt.show()
@@ -261,9 +279,9 @@ def check_freq_resolution(input_signal, input_time):
 
 # Single data
 # ------------------------------------------------------------------------------------------------------
-base_path = Path(r'data_handpicked\03_09_D_88mm_350mm')
-mat  = base_path / 'LBO_Sweep_1_8_39_29.mat'
-tdms = base_path / "ER1_0,65_Log1_03.09.2025_08.39.27.tdms"
+base_path = Path(r'data\03_09_D_88mm_350mm')
+mat  = base_path / 'LBO_Sweep_1_11_1_15.mat'
+tdms = base_path / "ER1_0,6_Log1_03.09.2025_11.01.13.tdms"
 
 # tdms = base_path / 'ER1_0,7_log4_29.08.2025_12.52.19.tdms'
 # mat  = base_path / 'Up_15_ERp_0.65_PH2p_0_12_52_22.mat'
